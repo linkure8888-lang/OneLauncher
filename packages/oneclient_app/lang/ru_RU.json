@@ -1872,7 +1872,7 @@
   "oneclient.loader_update.updated.body": "Этот экземпляр теперь использует %s.",
   "oneclient.loader_update.updated.title": "Загрузчик обновлен",
   "oneclient.microsoft_java.install_failed": "Установка Java не удалась",
-  "oneclient.microsoft_java.not_switched.body": "Оптимизированный Microsoft %s JDK готов, но кластер по-прежнему указывает на старую среду выполнения: %s. Пожалуйста, сообщите об этом в наш Telegram: t.me/remixclient",
+  "oneclient.microsoft_java.not_switched.body": "Оптимизированный Microsoft %s JDK готов, но кластер по-прежнему указывает на старую среду выполнения: %s. Пожалуйста, сообщите об этом в наш Telegram: t.me/remixclient_ru",
   "oneclient.microsoft_java.not_switched.title": "Кластер не переключен",
   "oneclient.microsoft_java.offer.body": "Основываясь на нашем исследовании, мы теперь рекомендуем OpenJDK от Microsoft, поскольку у него есть специальные оптимизации для Minecraft. Хотели бы вы использовать Microsoft OpenJDK в качестве установки Java по умолчанию? %s",
   "oneclient.microsoft_java.offer.closing.download": "В следующий раз Minecraft выйдет с Microsoft OpenJDK.",

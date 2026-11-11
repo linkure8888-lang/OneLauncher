@@ -1872,7 +1872,7 @@
   "oneclient.loader_update.updated.body": "This instance now uses %s.",
   "oneclient.loader_update.updated.title": "Loader updated",
   "oneclient.microsoft_java.install_failed": "Java install failed",
-  "oneclient.microsoft_java.not_switched.body": "Optimized Microsoft %s JDK is ready but the cluster still points at its old runtime: %s. Please report it in our Telegram chat: t.me/remixclient",
+  "oneclient.microsoft_java.not_switched.body": "Optimized Microsoft %s JDK is ready but the cluster still points at its old runtime: %s. Please report it in our Telegram chat: t.me/remixclient_ru",
   "oneclient.microsoft_java.not_switched.title": "Cluster not switched",
   "oneclient.microsoft_java.offer.body": "Based on our research, we now recommend Microsoft's OpenJDK as they have specific optimizations for Minecraft. Would you like to use Microsoft OpenJDK as your default Java installation? %s",
   "oneclient.microsoft_java.offer.closing.download": "Minecraft will launch with Microsoft OpenJDK next time.",

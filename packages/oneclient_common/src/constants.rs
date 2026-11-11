@@ -38,7 +38,7 @@ pub const CRASH_DATA_URL: &str =
 
 /// Community chat. The Polyfrost invite is deliberately gone: this fork has its
 /// own community and must not funnel users into upstream's server.
-pub const TELEGRAM_URL: &str = "https://t.me/remixclient";
+pub const TELEGRAM_URL: &str = "https://t.me/remixclient_ru";
 pub const DISCORD_URL: &str = TELEGRAM_URL;
 
 // Crash reports are opt-in and go to the maintainer's own project only. A

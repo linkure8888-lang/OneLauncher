@@ -71,7 +71,7 @@ jobs:
             libfontconfig-dev libfreetype-dev \
             libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libdbus-1-dev \
-            libfuse2
+            libfuse2 libxdo-dev desktop-file-utils
 
       # Only export the key when the secret really exists: an empty value makes
       # cargo-packager try to parse "" as a key and fail after the whole build.
@@ -104,7 +104,18 @@ jobs:
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked --version 0.11.8
 
+      # Linux is split so a broken AppImage tool cannot take the .deb down with it.
+      - name: Package (Linux deb)
+        if: runner.os == 'Linux'
+        run: cargo packager -p oneclient_app --release -f deb
+
+      - name: Package (Linux AppImage)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: cargo packager -p oneclient_app --release -f appimage
+
       - name: Package
+        if: runner.os != 'Linux'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
