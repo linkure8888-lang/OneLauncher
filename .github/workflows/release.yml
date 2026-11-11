@@ -17,6 +17,12 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   SQLX_OFFLINE: "true"
+  # Signing key for the updater. Add these in Settings -> Secrets -> Actions:
+  #   CARGO_PACKAGER_SIGN_PRIVATE_KEY          = contents of remixclient-updater.key
+  #   CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD = (empty for the current key)
+  # Without them the release still builds, but the launcher will not auto-update.
+  CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY }}
+  CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD }}
 
 jobs:
   windows:
@@ -42,9 +48,42 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          find target/release -maxdepth 1 -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) \
-            ! -name "oneclient_app.exe" -print -exec cp {} dist/ \; || true
+          shopt -s nullglob
+          for f in target/release/*setup.exe; do
+            cp "$f" "dist/RemixClient_${f##*_}"
+          done
+          for f in target/release/*setup.exe.sig; do
+            cp "$f" "dist/RemixClient_${f##*_}"
+          done
           ls -la dist
+
+      - name: Build latest.json
+        if: ${{ hashFiles('dist/*.sig') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, json, os, subprocess, datetime
+          version = subprocess.check_output(
+              ["sed", "-nE", "/^\\[workspace.package\\]/,/^\\[/ s/^version *= *\"([^\"]+)\".*/\\1/p", "Cargo.toml"],
+              text=True).strip().splitlines()[0]
+          exe = glob.glob("dist/RemixClient_*setup.exe")[0]
+          sig = exe + ".sig"
+          tag = os.environ.get("TAG") or f"v{version}"
+          url = (f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                 f"/releases/download/{tag}/{os.path.basename(exe)}")
+          data = {
+              "version": version,
+              "notes": f"RemixClient {version}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {"windows-x86_64": {"signature": open(sig).read(), "url": url}},
+          }
+          with open("dist/latest.json", "w") as fh:
+              json.dump(data, fh, indent=2)
+          print(open("dist/latest.json").read())
+          PY
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
