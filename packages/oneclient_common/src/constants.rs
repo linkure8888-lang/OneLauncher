@@ -36,7 +36,10 @@ pub const PLUS_BACKEND_URL: &str = "https://plus.polyfrost.org";
 pub const CRASH_DATA_URL: &str =
     "https://raw.githubusercontent.com/Polyfrost/CrashData/refs/heads/main/crashes.json";
 
-pub const DISCORD_URL: &str = "https://discord.com/invite/polyfrost";
+/// Community chat. The Polyfrost invite is deliberately gone: this fork has its
+/// own community and must not funnel users into upstream's server.
+pub const TELEGRAM_URL: &str = "https://t.me/remixclient";
+pub const DISCORD_URL: &str = TELEGRAM_URL;
 
 // Crash reports are opt-in and go to the maintainer's own project only. A
 // build without `REMIXCLIENT_SENTRY_DSN` sends nothing, so a fork never writes

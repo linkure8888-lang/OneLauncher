@@ -127,6 +127,15 @@ fn report_card() -> impl IntoElement {
                     Button::new()
                         .secondary()
                         .on_press(|_| {
+                            crate::platform::open_url(oneclient_common::constants::TELEGRAM_URL)
+                        })
+                        .child(Icon::new(IconType::Send01).size(16.))
+                        .text(t("oneclient.settings.help.report.telegram")),
+                )
+                .child(
+                    Button::new()
+                        .secondary()
+                        .on_press(|_| {
                             if let Ok(dir) = oneclient_common::paths::logs_dir() {
                                 crate::platform::open_path(&dir.to_string_lossy());
                             }
