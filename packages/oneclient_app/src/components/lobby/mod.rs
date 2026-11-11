@@ -337,34 +337,34 @@ pub fn party_message(err: PlusError) -> String {
 
 pub fn plus_message(err: PlusError) -> String {
     match err {
-        PlusError::ConsentRequired => t("oneclient.wardrobe.plus.consent_required").into(),
-        PlusError::OfflineAccount => t("oneclient.wardrobe.plus.offline_account").into(),
+        PlusError::ConsentRequired => t("oneclient.polyplus.plus.consent_required").into(),
+        PlusError::OfflineAccount => t("oneclient.polyplus.plus.offline_account").into(),
         PlusError::JoinRejected { status: 429, .. } => {
-            t("oneclient.wardrobe.plus.join_rate_limited").into()
+            t("oneclient.polyplus.plus.join_rate_limited").into()
         }
         PlusError::JoinRejected { status, .. } if status >= 500 => {
-            t("oneclient.wardrobe.mojang.server_error").into()
+            t("oneclient.polyplus.mojang.server_error").into()
         }
-        PlusError::JoinRejected { .. } => t("oneclient.wardrobe.mojang.sign_in_rejected").into(),
+        PlusError::JoinRejected { .. } => t("oneclient.polyplus.mojang.sign_in_rejected").into(),
         PlusError::LoginRejected { status, .. } if status >= 500 => {
-            t("oneclient.wardrobe.plus.server_error").into()
+            t("oneclient.polyplus.plus.server_error").into()
         }
-        PlusError::LoginRejected { .. } => t("oneclient.wardrobe.plus.login_rejected").into(),
-        PlusError::Api { status: 404, .. } => t("oneclient.wardrobe.plus.not_found").into(),
-        PlusError::Api { status: 409, .. } => t("oneclient.wardrobe.plus.limit_reached").into(),
-        PlusError::Api { status: 429, .. } => t("oneclient.wardrobe.plus.rate_limited").into(),
+        PlusError::LoginRejected { .. } => t("oneclient.polyplus.plus.login_rejected").into(),
+        PlusError::Api { status: 404, .. } => t("oneclient.polyplus.plus.not_found").into(),
+        PlusError::Api { status: 409, .. } => t("oneclient.polyplus.plus.limit_reached").into(),
+        PlusError::Api { status: 429, .. } => t("oneclient.polyplus.plus.rate_limited").into(),
         PlusError::Api { status, .. } if status >= 500 => {
-            t("oneclient.wardrobe.plus.server_error").into()
+            t("oneclient.polyplus.plus.server_error").into()
         }
         PlusError::Api { body, .. } if !body.trim().is_empty() => body.trim().to_string(),
         PlusError::Reqwest(err) if err.is_decode() => {
-            t("oneclient.wardrobe.plus.unexpected_response").into()
+            t("oneclient.polyplus.plus.unexpected_response").into()
         }
         PlusError::Request(oneclient_net::RequestError::DeserializeError { .. }) => {
-            t("oneclient.wardrobe.plus.unexpected_response").into()
+            t("oneclient.polyplus.plus.unexpected_response").into()
         }
         PlusError::Request(_) | PlusError::Reqwest(_) | PlusError::Websocket(_) => {
-            t("oneclient.wardrobe.plus.unreachable").into()
+            t("oneclient.polyplus.plus.unreachable").into()
         }
         other => other.to_string(),
     }
@@ -388,9 +388,9 @@ async fn lobby_account() -> Result<MinecraftAccount, (Option<Uuid>, String)> {
     }
     .filter(MinecraftAccount::is_microsoft)
     .filter(|_| allowed)
-    .ok_or_else(|| (None, t("oneclient.wardrobe.account.signed_out").to_string()))?;
+    .ok_or_else(|| (None, t("oneclient.polyplus.account.signed_out").to_string()))?;
     if account.needs_sign_in() || account.access_token.is_empty() {
-        return Err((None, t("oneclient.wardrobe.account.needs_sign_in").into()));
+        return Err((None, t("oneclient.polyplus.account.needs_sign_in").into()));
     }
     Ok(account)
 }

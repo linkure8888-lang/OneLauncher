@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to create, e.g. v2.10.1"
+        description: "Tag to create, e.g. v2.10.2"
         required: true
-        default: "v2.10.1"
+        default: "v2.10.2"
   push:
     tags:
       - "v*"
@@ -17,12 +17,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   SQLX_OFFLINE: "true"
-  # Updater signing key. Add both in Settings -> Secrets and variables -> Actions:
-  #   CARGO_PACKAGER_SIGN_PRIVATE_KEY          = contents of remixclient-updater.key
-  #   CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD = (empty for the current key)
-  # Without them everything still builds and ships, just without auto-update.
-  CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY }}
-  CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD }}
 
 jobs:
   build:
@@ -79,24 +73,42 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libdbus-1-dev \
             libfuse2
 
-      - name: Build release binary
+      # Only export the key when the secret really exists: an empty value makes
+      # cargo-packager try to parse "" as a key and fail after the whole build.
+      - name: Enable updater signing
         shell: bash
+        env:
+          KEY: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY }}
+          PASS: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          cargo build --release -p oneclient_app ${TARGET:+--target "$TARGET"}
+          if [ -z "${KEY:-}" ]; then
+            echo "No signing key secret; the release will ship without auto-update."
+            exit 0
+          fi
+          {
+            echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY<<__KEY__"
+            printf '%s\n' "$KEY"
+            echo "__KEY__"
+            echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD<<__PASS__"
+            printf '%s\n' "${PASS:-}"
+            echo "__PASS__"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release binary
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
+        run: cargo build --release -p oneclient_app ${TARGET:+--target "$TARGET"}
 
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked --version 0.11.8
 
       - name: Package
         shell: bash
-        run: |
-          set -euo pipefail
-          cargo packager -p oneclient_app --release -f ${{ matrix.formats }} ${TARGET:+--target "$TARGET"}
         env:
           TARGET: ${{ matrix.target }}
+        run: cargo packager -p oneclient_app --release -f ${{ matrix.formats }} ${TARGET:+--target "$TARGET"}
 
       - name: Collect artifacts
         shell: bash
@@ -106,17 +118,22 @@ jobs:
           shopt -s nullglob
           for dir in target/release target/*/release; do
             [ -d "$dir" ] || continue
-            for f in "$dir"/*.exe "$dir"/*.msi "$dir"/*.deb "$dir"/*.AppImage "$dir"/*.dmg "$dir"/*.tar.gz "$dir"/*.sig; do
+            for f in "$dir"/*.exe "$dir"/*.msi "$dir"/*.deb "$dir"/*.AppImage "$dir"/*.dmg "$dir"/*.tar.gz; do
               case "$(basename "$f")" in
                 oneclient_app.exe) continue ;;
               esac
               cp "$f" "dist/$(basename "$f" | sed 's/^oneclient_app/RemixClient/')"
             done
           done
+          # Signatures are named after the original artifact; rename them to match.
+          for f in target/release/*.sig target/*/release/*.sig; do
+            [ -f "$f" ] || continue
+            cp "$f" "dist/$(basename "$f" | sed 's/^oneclient_app/RemixClient/')"
+          done
           ls -la dist || true
 
       - name: Updater entry for this platform
-        if: ${{ hashFiles('dist/*.sig') != '' }}
+        if: ${{ hashFiles('target/release/*.sig', 'target/*/release/*.sig') != '' }}
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -126,18 +143,25 @@ jobs:
           python3 - <<'PY'
           import glob, json, os
           version = os.popen(
-              "sed -nE '/^\\[workspace.package\\]/,/^\\[/ s/^version *= *\"([^\"]+)\".*/\\1/p' Cargo.toml").read().split()[0]
+              "awk '/^\\[workspace\\.package\\]/{f=1;next} /^\\[/{f=0} f&&/^version/{gsub(/[^0-9.]/,\"\");print;exit}' Cargo.toml"
+          ).read().strip()
           sigs = sorted(glob.glob("dist/*.sig"))
           if not sigs:
               raise SystemExit(0)
           sig = sigs[0]
-          target = sig[:-4]
+          artifact = sig[:-4]
           url = (f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
-                 f"/releases/download/{os.environ['TAG']}/{os.path.basename(target)}")
-          entry = {"version": version, "notes": f"RemixClient {version}",
-                   "platforms": {os.environ["PLATFORM"]: {"signature": open(sig).read(), "url": url}}}
-          json.dump(entry, open("dist/updater-entry.json", "w"), indent=2)
-          print(open("dist/updater-entry.json").read())
+                 f"/releases/download/{os.environ['TAG']}/{os.path.basename(artifact)}")
+          entry = {
+              "version": version,
+              "platforms": {os.environ["PLATFORM"]: {
+                  "signature": open(sig).read().strip(),
+                  "url": url,
+              }},
+          }
+          out = f"dist/updater-entry-{os.environ['PLATFORM']}.json"
+          json.dump(entry, open(out, "w"), indent=2)
+          print(open(out).read())
           PY
 
       - name: Upload build artifact
@@ -147,27 +171,10 @@ jobs:
           path: dist/*
           if-no-files-found: warn
 
-      - name: Publish assets to the release
-        if: github.event_name == 'push' || inputs.tag != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: RemixClient ${{ inputs.tag || github.ref_name }}
-          draft: false
-          generate_release_notes: true
-          files: |
-            dist/*.exe
-            dist/*.msi
-            dist/*.deb
-            dist/*.AppImage
-            dist/*.dmg
-            dist/*.tar.gz
-            dist/*.sig
-
-  updater:
-    name: Updater manifest
+  publish:
+    name: Publish release
     needs: build
-    if: ${{ always() && (github.event_name == 'push' || inputs.tag != '') }}
+    if: ${{ always() && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -176,29 +183,40 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Merge platform entries
+      - name: Merge updater manifest
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import glob, json, datetime, os
+          entries = sorted(glob.glob("artifacts/updater-entry-*.json"))
           merged = {"version": None, "notes": "", "pub_date": None, "platforms": {}}
-          for path in glob.glob("artifacts/updater-entry.json"):
+          for path in entries:
               data = json.load(open(path))
-              merged["version"] = data["version"]
+              merged["version"] = data.get("version") or merged["version"]
               merged["platforms"].update(data.get("platforms", {}))
-          if not merged["platforms"]:
-              print("no signed platforms, skipping latest.json")
-              raise SystemExit(0)
-          merged["pub_date"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-          merged["notes"] = f"RemixClient {merged['version']} for " + ", ".join(sorted(merged["platforms"]))
-          os.makedirs("dist", exist_ok=True)
-          json.dump(merged, open("dist/latest.json", "w"), indent=2)
-          print(open("dist/latest.json").read())
+          if merged["platforms"]:
+              merged["pub_date"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+              merged["notes"] = f"RemixClient {merged['version']} for " + ", ".join(sorted(merged["platforms"]))
+              os.makedirs("dist", exist_ok=True)
+              json.dump(merged, open("dist/latest.json", "w"), indent=2)
+              print(open("dist/latest.json").read())
+          else:
+              print("no signed platform entries; skipping latest.json")
           PY
 
-      - name: Publish latest.json
+      - name: Publish assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
+          name: RemixClient ${{ inputs.tag || github.ref_name }}
           draft: false
-          files: dist/latest.json
+          generate_release_notes: true
+          files: |
+            artifacts/*.exe
+            artifacts/*.msi
+            artifacts/*.deb
+            artifacts/*.AppImage
+            artifacts/*.dmg
+            artifacts/*.tar.gz
+            artifacts/*.sig
+            dist/latest.json
