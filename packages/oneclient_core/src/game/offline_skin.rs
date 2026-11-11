@@ -357,3 +357,200 @@ mod tests {
         assert!(parse_texture_path("/skin/not-a-uuid.png").is_none());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Skin library
+//
+// Offline accounts each keep their own skin under `skins/<uuid>/`. The library
+// is the shared shelf above them: any imported PNG lives once in
+// `skins/library/<id>/` and can be applied to any offline account without
+// picking the file again. Everything stays on disk, so it works offline and
+// needs no backend of ours.
+// ---------------------------------------------------------------------------
+
+/// One entry of the shared skin shelf.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LibrarySkin {
+    pub name: String,
+    #[serde(default)]
+    pub model: SkinModel,
+    #[serde(default)]
+    pub has_cape: bool,
+}
+
+const LIBRARY_DIR: &str = "library";
+const LIBRARY_META: &str = "skin.json";
+
+pub fn library_root() -> Result<PathBuf, String> {
+    Ok(paths::skins_dir()
+        .map_err(|err| err.to_string())?
+        .join(LIBRARY_DIR))
+}
+
+fn library_dir(id: Uuid) -> Result<PathBuf, String> {
+    Ok(library_root()?.join(id.simple().to_string()))
+}
+
+/// Where a library skin's PNG lives, for previews.
+pub fn library_skin_path(id: Uuid) -> Result<PathBuf, String> {
+    Ok(library_dir(id)?.join(SKIN_FILE))
+}
+
+/// Trims a user-supplied name and drops path separators. The name never reaches
+/// the filesystem (entries are keyed by UUID), but it is shown in the UI, so it
+/// should not be a wall of whitespace or a slash.
+#[must_use]
+pub fn clean_skin_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if c == '/' || c == '\\' { ' ' } else { c })
+        .collect();
+    let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    if cleaned.chars().count() > 64 {
+        cleaned.chars().take(64).collect()
+    } else {
+        cleaned
+    }
+}
+
+/// Every skin in the library, newest first is not tracked, so it is sorted by
+/// name to stay stable between launches.
+pub async fn list_library_skins() -> Vec<(Uuid, LibrarySkin)> {
+    let Ok(root) = library_root() else {
+        return Vec::new();
+    };
+    let Ok(mut entries) = tokio::fs::read_dir(&root).await else {
+        return Vec::new();
+    };
+
+    let mut skins = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let Ok(id) = entry.file_name().to_string_lossy().parse::<Uuid>() else {
+            continue;
+        };
+        let dir = entry.path();
+        if !dir.join(SKIN_FILE).is_file() {
+            continue;
+        }
+        let mut skin = tokio::fs::read(dir.join(LIBRARY_META))
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<LibrarySkin>(&bytes).ok())
+            .unwrap_or_else(|| LibrarySkin {
+                name: id.simple().to_string(),
+                model: SkinModel::Classic,
+                has_cape: false,
+            });
+        skin.has_cape = dir.join(CAPE_FILE).is_file();
+        skins.push((id, skin));
+    }
+
+    skins.sort_by(|a, b| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase()));
+    skins
+}
+
+/// Copies a picked skin (and optional cape) into the library.
+pub async fn import_library_skin(
+    name: &str,
+    skin: PathBuf,
+    cape: Option<PathBuf>,
+    model: SkinModel,
+) -> Result<(Uuid, LibrarySkin), String> {
+    validate_png(&skin, &[(64, 64), (64, 32), (128, 64), (128, 128)])?;
+    if let Some(cape) = &cape {
+        validate_png(cape, &[(64, 32), (22, 17), (128, 64)])?;
+    }
+
+    let id = Uuid::new_v4();
+    let dir = library_dir(id)?;
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|err| err.to_string())?;
+    tokio::fs::copy(&skin, dir.join(SKIN_FILE))
+        .await
+        .map_err(|err| err.to_string())?;
+    if let Some(cape) = cape {
+        tokio::fs::copy(cape, dir.join(CAPE_FILE))
+            .await
+            .map_err(|err| err.to_string())?;
+    }
+
+    let mut cleaned = clean_skin_name(name);
+    if cleaned.is_empty() {
+        cleaned = skin
+            .file_stem()
+            .map(|stem| clean_skin_name(&stem.to_string_lossy()))
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or_else(|| "Skin".to_string());
+    }
+
+    let entry = LibrarySkin {
+        name: cleaned,
+        model,
+        has_cape: dir.join(CAPE_FILE).is_file(),
+    };
+    let bytes = serde_json::to_vec(&entry).map_err(|err| err.to_string())?;
+    tokio::fs::write(dir.join(LIBRARY_META), bytes)
+        .await
+        .map_err(|err| err.to_string())?;
+
+    Ok((id, entry))
+}
+
+pub async fn delete_library_skin(id: Uuid) -> Result<(), String> {
+    let dir = library_dir(id)?;
+    match tokio::fs::remove_dir_all(&dir).await {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+/// Copies a library skin onto an account, so the next launch shows it.
+pub async fn apply_library_skin(account_id: Uuid, id: Uuid) -> Result<OfflineSkin, String> {
+    let dir = library_dir(id)?;
+    let skin = dir.join(SKIN_FILE);
+    if !skin.is_file() {
+        return Err("that skin is no longer in the library".to_string());
+    }
+    let meta = tokio::fs::read(dir.join(LIBRARY_META))
+        .await
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<LibrarySkin>(&bytes).ok())
+        .unwrap_or_default();
+    let cape = dir.join(CAPE_FILE);
+    let cape = cape.is_file().then_some(cape);
+    save_offline_skin(account_id, Some(skin), cape, meta.model).await
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+
+    #[test]
+    fn names_are_trimmed_and_slashes_are_dropped() {
+        assert_eq!(clean_skin_name("  my  skin  "), "my skin");
+        assert_eq!(clean_skin_name("../../etc/passwd"), ".. .. etc passwd");
+        assert_eq!(clean_skin_name("   "), "");
+    }
+
+    #[test]
+    fn very_long_names_are_cut() {
+        let name = "x".repeat(200);
+        assert_eq!(clean_skin_name(&name).chars().count(), 64);
+    }
+
+    #[test]
+    fn library_entries_round_trip_through_json() {
+        let entry = LibrarySkin {
+            name: "Knight".to_string(),
+            model: SkinModel::Slim,
+            has_cape: true,
+        };
+        let encoded = serde_json::to_string(&entry).unwrap();
+        assert_eq!(
+            serde_json::from_str::<LibrarySkin>(&encoded).unwrap(),
+            entry
+        );
+    }
+}
