@@ -223,6 +223,14 @@ async fn start(
     {
         tracing::warn!(cluster_id, error = %err, "failed to install bundle content");
     }
+
+    // PolyPlus and friends need a real session; on an offline account they only
+    // spam Mojang and the Poly+ websocket with failures. Toggle them per account.
+    if let Err(err) =
+        crate::game::sync_offline_mods(cluster_id, account, &state.services.content()).await
+    {
+        tracing::warn!(cluster_id, error = %err, "could not adjust offline-only mods");
+    }
     let cluster = match crate::clusters::auto_update_loader(state, &cluster).await {
         Ok(updated) => updated.unwrap_or(cluster),
         Err(err) => {
@@ -230,6 +238,39 @@ async fn start(
             cluster
         }
     };
+
+    // Snapshot changed worlds before anything can crash. A failed backup is
+    // reported but never blocks the launch.
+    let (backups_enabled, backup_retention) = {
+        let settings = state.settings.read();
+        (
+            settings.backup_worlds_before_launch,
+            settings.world_backup_retention.max(1) as usize,
+        )
+    };
+    if backups_enabled {
+        let report =
+            crate::game::world_backup::backup_before_launch(&cluster, backup_retention).await;
+        if !report.created.is_empty() {
+            tracing::info!(
+                cluster_id,
+                count = report.created.len(),
+                "world backups created"
+            );
+        }
+        if !report.failures.is_empty() {
+            tracing::warn!(
+                cluster_id,
+                failures = ?report.failures,
+                "some worlds could not be backed up"
+            );
+            events
+                .notify("World backup failed")
+                .body(report.failures.join("\n"))
+                .error()
+                .send();
+        }
+    }
 
     let global = state.settings.read().global_game_settings.clone();
     let profile = state.clusters.resolve_settings(&global, &cluster).await?;
@@ -315,9 +356,8 @@ async fn start(
     // Stats every library and the asset tree, the same work `plan_downloads`
     // already keeps off the runtime threads. `block_in_place` because
     // `VersionInfo` is not `Clone` and the sweep only reads it
-    let missing = tokio::task::block_in_place(|| {
-        game_files_missing(&version_info, &java.os_arch, updated)
-    });
+    let missing =
+        tokio::task::block_in_place(|| game_files_missing(&version_info, &java.os_arch, updated));
     match missing {
         Ok(true) => {
             tracing::info!(cluster_id, "missing game files; repairing");
@@ -437,10 +477,36 @@ async fn start(
 
     oneclient_cluster::logs::censor_username(&account.username);
 
+    // An offline account has no Microsoft session at all, so the game must be
+    // told to use the legacy (offline) identity path instead of MSA. Vanilla
+    // defaults a missing token to `0`; an empty string is not a value any
+    // vanilla/loader code path expects, so send the same placeholder.
+    let user_type = if account.is_offline() {
+        "legacy"
+    } else {
+        "msa"
+    };
+    let access_token = if account.is_offline() {
+        "0".to_string()
+    } else {
+        account.access_token.clone()
+    };
+    // A local skin/cape travels as a normal profile texture property, which the
+    // vanilla client accepts in offline mode.
+    let user_properties = if account.is_offline() {
+        crate::game::offline_skin::user_properties(account)
+            .await
+            .unwrap_or_else(|| "{}".to_string())
+    } else {
+        "{}".to_string()
+    };
+
     let mut mc_args = arguments::minecraft_arguments(
         arg_map.get(&ArgumentType::Game).map(Vec::as_slice),
         version_info.minecraft_arguments.as_deref(),
-        &account.access_token,
+        &access_token,
+        user_type,
+        &user_properties,
         &account.username,
         account.id,
         &version.id,
@@ -492,7 +558,7 @@ async fn start(
         .current_dir(&cwd);
 
     let header = format!(
-        "OneClient {} · {} · {version_name} · Java {}\n\n{}\n\n",
+        "RemixClient {} · {} · {version_name} · Java {}\n\n{}\n\n",
         env!("CARGO_PKG_VERSION"),
         cluster.name,
         java.major,

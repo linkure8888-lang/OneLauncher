@@ -5,7 +5,7 @@ use uuid::Uuid;
 use oneclient_common::paths;
 use oneclient_events::EventBus;
 
-use crate::data::{AccountKind, MinecraftAccount};
+use crate::data::MinecraftAccount;
 use crate::error::{AuthError, AuthResult};
 use crate::offline::{offline_account, validate_offline_username};
 
@@ -40,12 +40,6 @@ impl CredentialsStore {
         Ok(())
     }
 
-    pub fn has_microsoft_account(&self) -> bool {
-        self.users
-            .values()
-            .any(|account| account.kind == AccountKind::Microsoft)
-    }
-
     pub fn list_accounts(&self) -> Vec<MinecraftAccount> {
         self.users.values().cloned().collect()
     }
@@ -75,6 +69,9 @@ impl CredentialsStore {
         Ok(account)
     }
 
+    /// Adds an offline account **in memory only**. Production code must use
+    /// [`Self::add_offline_account_and_save`], otherwise the account is lost on
+    /// restart. Kept public for tests that only inspect the store.
     pub fn add_offline_account(&mut self, username: String) -> AuthResult<MinecraftAccount> {
         let account = self.insert_offline_account(username)?;
         Ok(account)
@@ -91,10 +88,6 @@ impl CredentialsStore {
     }
 
     fn insert_offline_account(&mut self, username: String) -> AuthResult<MinecraftAccount> {
-        if !self.has_microsoft_account() {
-            return Err(AuthError::OfflineRequiresMicrosoft);
-        }
-
         validate_offline_username(&username)?;
 
         if self
@@ -107,6 +100,9 @@ impl CredentialsStore {
 
         let account = offline_account(username);
         self.users.insert(account.id, account.clone());
+        if self.default_user.is_none() {
+            self.default_user = Some(account.id);
+        }
         Ok(account)
     }
 
@@ -204,10 +200,6 @@ impl CredentialsStore {
         let Some(account) = self.users.get(&id).cloned() else {
             return Ok(None);
         };
-
-        if account.is_offline() && !self.has_microsoft_account() {
-            return Err(AuthError::OfflineRequiresMicrosoft);
-        }
 
         Ok(Some(account))
     }

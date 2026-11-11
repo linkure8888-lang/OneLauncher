@@ -7,11 +7,14 @@ mod heal;
 mod launch;
 mod log_replay;
 pub(crate) mod natives;
+pub mod offline_mods;
+pub mod offline_skin;
 mod process;
 mod reattach;
 mod session;
 mod shared_dir;
 mod tail;
+pub mod world_backup;
 
 pub use analytics::{
     Analytics, DayPlaytime, Persona, PlaytimeStats, ServerStat, WEEKDAY_LABELS, aggregate_servers,
@@ -36,6 +39,11 @@ pub use launch::{
     LaunchedGame, crash_mod_issues, is_running, launch_cluster, launch_cluster_with, repair_cluster,
 };
 pub use mod_problems::{ModProblem, ModProblemKind, ModRef};
+pub use offline_mods::{is_microsoft_only, sync_for_account as sync_offline_mods};
+pub use offline_skin::{
+    OfflineSkin, SkinModel, load_offline_skin, remove_offline_cape, save_offline_skin,
+    user_properties,
+};
 pub use oneclient_mc::{
     DownloadPlan, GameVersionInfo, GameVersionKind, NativesMode, NativesReport, PlannedLibrary,
     check_natives, confirm_incomplete_install, download_minecraft, download_version_info,
@@ -54,4 +62,8 @@ pub use shared_dir::{
     DuplicateMods, dematerialize_content, import_manual_content, join_shared_folder,
     leave_shared_folder, link_cluster_logs, materialize_content, shadowed_bundle_mods,
     split_dedicated_packs, sync_cluster_mods, unlink_cluster_logs, write_allowed_symlinks,
+};
+pub use world_backup::{
+    WorldBackupError, WorldBackupInfo, WorldBackupReport, WorldBackupResult, backup_before_launch,
+    backup_world, backup_worlds, list_world_backups, restore_world_backup,
 };

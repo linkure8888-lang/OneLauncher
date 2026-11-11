@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use freya::prelude::*;
-use oneclient_common::GameLoader;
 use freya::router::RouterContext;
+use oneclient_common::GameLoader;
 use oneclient_core::GameVersionKind;
 use oneclient_core::clusters::{ClusterKind, ModpackSource};
 
@@ -68,8 +68,8 @@ fn wizard_rail(wizard: Wizard, picks: &Picks) -> Element {
     let subtitle = if description.is_empty() {
         match picks.choice {
             TypeChoice::OneClient => match &picks.versions.chosen {
-                Some(version) => format!("OneClient · {version}"),
-                None => "OneClient".to_string(),
+                Some(version) => format!("RemixClient · {version}"),
+                None => "RemixClient".to_string(),
             },
             TypeChoice::Scratch => match &picks.versions.chosen {
                 Some(version) => format!("{version} · {}", picks.loader_label()),
@@ -170,7 +170,9 @@ impl Component for CreateInstanceModal {
         let prefill_loader = self
             .prefill
             .as_ref()
-            .map_or(LoaderChoice::Fabric, |(_, loader)| LoaderChoice::of(*loader));
+            .map_or(LoaderChoice::Fabric, |(_, loader)| {
+                LoaderChoice::of(*loader)
+            });
         let wizard = Wizard {
             exact_loader: self.prefill.as_ref().map(|(_, loader)| *loader),
             step: use_state(|| 0usize),
