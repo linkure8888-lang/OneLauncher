@@ -6,6 +6,7 @@ use freya::query::QueryStateData;
 use freya::router::*;
 use skia_safe::canvas::SrcRectConstraint;
 use skia_safe::sampling_options::CubicResampler;
+use skia_safe::{FilterMode, MipmapMode};
 
 use crate::Route;
 use crate::components::Button;
@@ -448,7 +449,10 @@ impl Component for ParallaxArt {
 
             let mut paint = Paint::default();
             paint.set_anti_alias(true);
-            let sampling = SamplingOptions::from(CubicResampler::mitchell());
+            // Linear sampling: the parallax moves this image every frame, and a
+            // cubic resample of a full-window bitmap costs far more than the
+            // difference is worth on a photo background.
+            let sampling = SamplingOptions::new(FilterMode::Linear, MipmapMode::Linear);
             canvas.draw_image_rect_with_sampling_options(
                 image,
                 Some((&src, SrcRectConstraint::Strict)),
