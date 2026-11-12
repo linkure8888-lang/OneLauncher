@@ -22,7 +22,6 @@ const NAVBAR_INTRO_MS: u64 = 460;
 const LOGO_HIDE_NAVBAR_W: f32 = 1280.;
 const NAVBAR_SIDE_PADDING_PX: f32 = 40.;
 const NAV_LINK_SPACING_PX: f32 = 26.;
-const COMPACT_LOGO_PX: f32 = 32.;
 
 #[derive(PartialEq)]
 pub struct Navbar;
@@ -326,6 +325,7 @@ impl Component for NavbarRight {
         rect()
             .horizontal()
             .width(Size::flex(1.0))
+            .overflow(Overflow::Clip)
             .main_align(Alignment::End)
             .cross_align(Alignment::Center)
             .spacing(8.)
