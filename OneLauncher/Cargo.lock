@@ -4980,6 +4980,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oneclient_social"
+version = "2.11.3"
+dependencies = [
+ "chrono",
+ "directories",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "open"
 version = "5.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
