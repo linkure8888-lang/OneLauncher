@@ -12,7 +12,9 @@
 use std::time::{Duration, Instant};
 
 mod servers_analytics;
+mod custom_servers;
 pub use servers_analytics::{record_server_click, get_clicks_last_30_days, upload_analytics_stub, ServerClickRecord, ServerAnalyticsStore};
+pub use custom_servers::{load_custom_servers, save_custom_server, remove_custom_server};
 
 use serde::{Deserialize, Serialize};
 
@@ -154,8 +156,8 @@ mod tests {
             port,
             region: "RU".to_string(),
             tags: Vec::new(),
-            promoted: false,
-            url: None,
+            is_promoted: false,
+            sponsor_url: None,
         }
     }
 
