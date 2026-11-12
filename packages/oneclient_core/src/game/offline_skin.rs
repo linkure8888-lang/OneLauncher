@@ -391,9 +391,33 @@ fn library_dir(id: Uuid) -> Result<PathBuf, String> {
     Ok(library_root()?.join(id.simple().to_string()))
 }
 
-/// Where a library skin's PNG lives, for previews.
+/// Where a library skin's PNG lives.
 pub fn library_skin_path(id: Uuid) -> Result<PathBuf, String> {
     Ok(library_dir(id)?.join(SKIN_FILE))
+}
+
+const HEAD_FILE: &str = "head.png";
+
+/// Cropped 8x8 head scaled up: the UI needs a readable preview, and the raw
+/// skin atlas is mostly transparent.
+pub fn library_head_path(id: Uuid) -> Result<PathBuf, String> {
+    Ok(library_dir(id)?.join(HEAD_FILE))
+}
+
+/// Writes `head.png` next to the skin. Best effort: a preview is cosmetic.
+fn write_head_preview(dir: &Path) {
+    let skin = dir.join(SKIN_FILE);
+    let Ok(image) = image::open(&skin) else {
+        return;
+    };
+    if image.width() < 16 || image.height() < 16 {
+        return;
+    }
+    let head =
+        image
+            .crop_imm(8, 8, 8, 8)
+            .resize_exact(128, 128, image::imageops::FilterType::Nearest);
+    let _ = head.save(dir.join(HEAD_FILE));
 }
 
 /// Trims a user-supplied name and drops path separators. The name never reaches
@@ -442,6 +466,9 @@ pub async fn list_library_skins() -> Vec<(Uuid, LibrarySkin)> {
                 has_cape: false,
             });
         skin.has_cape = dir.join(CAPE_FILE).is_file();
+        if !dir.join(HEAD_FILE).is_file() {
+            write_head_preview(&dir);
+        }
         skins.push((id, skin));
     }
 
@@ -489,6 +516,7 @@ pub async fn import_library_skin(
         model,
         has_cape: dir.join(CAPE_FILE).is_file(),
     };
+    write_head_preview(&dir);
     let bytes = serde_json::to_vec(&entry).map_err(|err| err.to_string())?;
     tokio::fs::write(dir.join(LIBRARY_META), bytes)
         .await

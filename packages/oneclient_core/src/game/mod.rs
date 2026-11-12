@@ -42,8 +42,8 @@ pub use mod_problems::{ModProblem, ModProblemKind, ModRef};
 pub use offline_mods::{is_microsoft_only, sync_for_account as sync_offline_mods};
 pub use offline_skin::{
     LibrarySkin, OfflineSkin, SkinModel, apply_library_skin, clean_skin_name, delete_library_skin,
-    import_library_skin, library_root, library_skin_path, list_library_skins, load_offline_skin,
-    remove_offline_cape, save_offline_skin, user_properties,
+    import_library_skin, library_head_path, library_root, library_skin_path, list_library_skins,
+    load_offline_skin, remove_offline_cape, save_offline_skin, user_properties,
 };
 pub use oneclient_mc::{
     DownloadPlan, GameVersionInfo, GameVersionKind, NativesMode, NativesReport, PlannedLibrary,

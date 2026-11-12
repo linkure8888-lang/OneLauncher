@@ -2,7 +2,9 @@ use freya::prelude::*;
 use oneclient_core::{LibrarySkin, SkinModel};
 use uuid::Uuid;
 
-use crate::components::{Button, Icon, IconType, LocalImage, ScrollArea};
+use freya::elements::image::ImageHandle;
+
+use crate::components::{Button, Icon, IconType, ScrollArea};
 use crate::hooks::{
     invalidate_skin_library, settled_or_loading, use_current_account, use_dispatch,
     use_skin_library,
@@ -72,7 +74,8 @@ impl Component for Skins {
             let mut grid = rect()
                 .horizontal()
                 .width(Size::fill())
-                .content(Content::wrap_spacing(16.));
+                .content(Content::wrap_spacing(16.))
+                .child(add_tile(add.clone()));
             for (id, skin) in skins {
                 grid = grid.child(SkinCard {
                     id,
@@ -123,13 +126,6 @@ impl Component for Skins {
                                                     .font_size(text_size(13.))
                                                     .color(colors::fg_secondary()),
                                             ),
-                                    )
-                                    .child(
-                                        Button::new()
-                                            .primary()
-                                            .on_press(add)
-                                            .child(Icon::new(IconType::Plus).size(16.))
-                                            .text(t("oneclient.skins.add")),
                                     ),
                             )
                             .child(body),
@@ -227,7 +223,7 @@ impl Component for SkinCard {
             }
         };
 
-        let preview = oneclient_core::library_skin_path(id).ok();
+        let preview = oneclient_core::library_head_path(id).ok();
 
         rect()
             .vertical()
@@ -244,13 +240,7 @@ impl Component for SkinCard {
                     .corner_radius(rounded(8.))
                     .overflow(Overflow::Clip)
                     .background(colors::component_bg())
-                    .center()
-                    .maybe_child(preview.map(|path| {
-                        rect()
-                            .width(Size::fill())
-                            .height(Size::fill())
-                            .child(LocalImage::new(path, PREVIEW_EDGE, true))
-                    })),
+                    .maybe_child(preview.map(|path| SkinHead { path })),
             )
             .child(
                 label()
@@ -290,5 +280,68 @@ impl Component for SkinCard {
                             .child(Icon::new(IconType::Trash01).size(13.)),
                     ),
             )
+    }
+}
+
+fn add_tile(on_press: impl FnMut(Event<PressEventData>) + 'static) -> Element {
+    rect()
+        .vertical()
+        .width(Size::px(CARD_WIDTH))
+        .spacing(8.)
+        .padding(Gaps::new_all(12.))
+        .corner_radius(rounded(12.))
+        .background(colors::component_bg())
+        .border(border_all_color(1., colors::component_border()))
+        .center()
+        .cursor(CursorIcon::Pointer)
+        .on_press(on_press)
+        .child(Icon::new(IconType::Plus).size(26.).color(colors::brand()))
+        .child(
+            label()
+                .text(t("oneclient.skins.add"))
+                .font_size(text_size(13.))
+                .font_weight(FontWeight::MEDIUM)
+                .color(colors::fg_primary()),
+        )
+        .into_element()
+}
+
+/// Loads a PNG head preview straight from disk.
+///
+/// `LocalImage` keeps coming back empty for library files (its query stays
+/// pending), so the preview is decoded here once on mount instead.
+#[derive(PartialEq)]
+struct SkinHead {
+    path: std::path::PathBuf,
+}
+
+impl Component for SkinHead {
+    fn render(&self) -> impl IntoElement {
+        let mut handle = use_state(|| None::<ImageHandle>);
+        if handle.read().is_none() {
+            let path = self.path.clone();
+            use_hook(move || {
+                spawn(async move {
+                    if let Ok(raw) = tokio::fs::read(&path).await {
+                        let bytes = bytes::Bytes::from(raw);
+                        if let Some(image) = crate::components::decode_local_image(&bytes) {
+                            handle.set(Some(image));
+                        }
+                    }
+                });
+            });
+        }
+
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .center()
+            .maybe_child(handle.read().clone().map(|image| {
+                freya::prelude::image(image)
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .aspect_ratio(AspectRatio::Min)
+                    .image_cover(ImageCover::Center)
+            }))
     }
 }

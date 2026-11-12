@@ -45,9 +45,9 @@ pub use game::{
     WorldBackupError, WorldBackupInfo, WorldBackupReport, WorldBackupResult, apply_library_skin,
     backup_before_launch, backup_world, backup_worlds, delete_library_skin, get_loader_versions,
     get_loaders_for_version, get_version_ids, get_versions_for_loader, import_library_skin,
-    launch_cluster, launch_cluster_with, library_skin_path, list_library_skins, list_world_backups,
-    load_offline_skin, remove_offline_cape, restore_world_backup, save_offline_skin,
-    user_properties,
+    launch_cluster, launch_cluster_with, library_head_path, library_skin_path, list_library_skins,
+    list_world_backups, load_offline_skin, remove_offline_cape, restore_world_backup,
+    save_offline_skin, user_properties,
 };
 pub use images::ImageCacheStore;
 pub use migration::launchers::{
