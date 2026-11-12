@@ -149,7 +149,7 @@ fn empty_state() -> Element {
         .background(colors::page_elevated())
         .border(border_all_color(1., colors::component_border()))
         .child(
-            Icon::new(IconType::Image01)
+            Icon::new(IconType::Brush01)
                 .size(28.)
                 .color(colors::fg_secondary()),
         )
@@ -246,9 +246,10 @@ impl Component for SkinCard {
                     .background(colors::component_bg())
                     .center()
                     .maybe_child(preview.map(|path| {
-                        LocalImage::new(path, PREVIEW_EDGE, true)
+                        rect()
                             .width(Size::fill())
                             .height(Size::fill())
+                            .child(LocalImage::new(path, PREVIEW_EDGE, true))
                     })),
             )
             .child(

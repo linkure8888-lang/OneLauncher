@@ -5,7 +5,7 @@ use freya::prelude::*;
 use freya::query::QueryStateData;
 use freya::router::*;
 use skia_safe::canvas::SrcRectConstraint;
-use skia_safe::sampling_options::CubicResampler;
+
 use skia_safe::{FilterMode, MipmapMode};
 
 use crate::Route;
