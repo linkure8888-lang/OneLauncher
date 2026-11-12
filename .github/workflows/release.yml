@@ -104,10 +104,9 @@ jobs:
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked --version 0.11.8
 
-      # Linux is split so a broken AppImage tool cannot take the .deb down with it.
-      # A plain tarball is the guaranteed Linux artifact: it needs no dpkg, no
-      # AppImage tooling and no desktop integration, so Linux users always get a
-      # working build even when the fancy formats fail.
+      # A plain tarball is the Linux artifact: it needs no dpkg, no AppImage
+      # tooling and no desktop integration, so it cannot fail after the build.
+      # deb and AppImage kept failing in packaging and are on the backlog.
       - name: Package (Linux tarball)
         if: runner.os == 'Linux'
         shell: bash
@@ -117,16 +116,6 @@ jobs:
           mkdir -p dist
           tar -czf "dist/RemixClient_${VERSION}_linux_x86_64.tar.gz" -C target/release oneclient_app
           ls -la dist
-
-      - name: Package (Linux deb)
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: cargo packager -p oneclient_app --release -f deb --verbose
-
-      - name: Package (Linux AppImage)
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: cargo packager -p oneclient_app --release -f appimage --verbose
 
       - name: Package
         if: runner.os != 'Linux'
