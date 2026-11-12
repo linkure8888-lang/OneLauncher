@@ -92,12 +92,6 @@ fn navbar_left(show_logo: bool, over_art: bool) -> impl IntoElement {
         .maybe(!show_logo, |el| {
             el.padding(Gaps::new(0., NAV_LINK_SPACING_PX, 0., 0.))
         })
-        .child(
-            Icon::new(IconType::IconLogo)
-                .size(COMPACT_LOGO_PX)
-                .color(primary_color(over_art))
-                .into_element(),
-        )
         .maybe(show_logo, |rect| {
             rect.child(NavbarLogo { over_art }.into_element())
         })
@@ -181,6 +175,12 @@ fn navbar_center(is_small: bool) -> impl IntoElement {
             active: route == Route::Servers {},
             target: NavTarget::Route(Route::Servers {}),
             nav_label: t("oneclient.components.navbar.servers"),
+            over_art,
+        })
+        .child(NavLink {
+            active: route == Route::Friends {},
+            target: NavTarget::Route(Route::Friends {}),
+            nav_label: t("oneclient.components.navbar.friends"),
             over_art,
         })
 }
