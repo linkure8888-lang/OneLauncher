@@ -1,0 +1,8 @@
+# Shows a "Sponsor" button on the repository.
+# Fill these in when the accounts exist; any line can be left out.
+custom:
+  - "https://t.me/remixclient_ru"
+# github: [linkure8888-lang]
+# boosty: remixclient
+# patreon: remixclient
+# ko_fi: remixclient
