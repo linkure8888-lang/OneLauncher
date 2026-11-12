@@ -1,0 +1,48 @@
+// TODO Remove this once freya has some workaround for this
+#![allow(float_literal_f32_fallback)]
+// Instrumented oneclient_core async call chains exceed the default limit
+#![recursion_limit = "256"]
+
+mod assets;
+pub mod chat;
+pub mod cli;
+mod components;
+pub mod disable;
+pub mod essential;
+pub mod events;
+pub(crate) mod file_content;
+pub mod hooks;
+pub(crate) mod i18n;
+mod install;
+pub mod invite_join;
+pub mod ipc;
+mod launcher;
+mod layout;
+pub mod loader_update;
+pub mod microsoft_java;
+mod motion;
+mod notifications;
+pub mod platform;
+pub mod portable;
+pub mod protocol;
+pub mod recovery;
+mod routes;
+pub mod shortcut;
+pub mod state;
+pub mod theme;
+mod transfer;
+pub mod translations;
+mod ui;
+pub mod updater;
+pub(crate) mod utils;
+mod view;
+
+pub mod constants;
+
+pub use assets::AppAssets;
+pub use components::{ConfirmLinkOverlay, DisableDependentsOverlay, EssentialConfirmOverlay};
+pub use events::EventPump;
+pub use hooks::*;
+pub use routes::{Route, router};
+pub use state::{AppChannel, AppState};
+pub use view::chat::close_chat_window;

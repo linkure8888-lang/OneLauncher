@@ -1,0 +1,195 @@
+//! Fallback renderer for prompts no dedicated overlay claims
+//! Without it an unrendered prompt leaves the core blocked on `ask()` blocking all later prompts
+
+use freya::prelude::*;
+use oneclient_events::{Answer, ChoiceInput, ChoiceStyle};
+use oneclient_java::JAVA_CHOICE_DOWNLOAD;
+
+use crate::components::{Button, OVERLAY_BASE_LEVEL, OverlayPopup};
+use crate::hooks::{use_dispatch, use_notifications_snapshot};
+use crate::microsoft_java::MICROSOFT_JAVA_CHOICE_INSTALL;
+use crate::notifications::PendingPromptView;
+use crate::theme::{colors, rounded, text_size};
+use crate::ui::border_all_color;
+use crate::updater::UPDATE_CHOICE_INSTALL;
+
+fn claimed_elsewhere(prompt: &PendingPromptView) -> bool {
+    prompt.has_choice(JAVA_CHOICE_DOWNLOAD)
+        || prompt.has_choice(UPDATE_CHOICE_INSTALL)
+        || prompt.has_choice(MICROSOFT_JAVA_CHOICE_INSTALL)
+}
+
+#[derive(PartialEq)]
+pub struct GenericPromptOverlay;
+
+impl Component for GenericPromptOverlay {
+    fn render(&self) -> impl IntoElement {
+        // Hooks run unconditionally before any early return to keep the hook count stable
+        let snapshot = use_notifications_snapshot();
+        let dispatch = use_dispatch();
+
+        let Some(prompt) = snapshot.pending_prompt.clone() else {
+            return rect().into_element();
+        };
+
+        if claimed_elsewhere(&prompt) {
+            return rect().into_element();
+        }
+
+        let close = dispatch.clone();
+
+        let mut secondary = rect()
+            .horizontal()
+            .content(Content::Wrap {
+                wrap_spacing: Some(8.),
+            })
+            .width(Size::flex(1.))
+            .spacing(8.);
+        let mut primary = rect().horizontal().spacing(8.);
+
+        if let Some(dismiss) = prompt.dismiss.clone() {
+            let cancel = dispatch.clone();
+            secondary = secondary.child(
+                Button::new()
+                    .secondary()
+                    .text(dismiss)
+                    .on_press(move |_| cancel.dismiss_prompt()),
+            );
+        }
+
+        for choice in &prompt.choices {
+            let dispatch = dispatch.clone();
+            let id = choice.id;
+            let input = choice.input.clone();
+
+            let button = Button::new().text(choice.label.clone());
+            let (button, is_secondary) = match choice.style {
+                ChoiceStyle::Primary => (button.primary(), false),
+                ChoiceStyle::Danger => (button.danger(), false),
+                ChoiceStyle::Secondary => (button.secondary(), true),
+            };
+
+            let button = button.on_press(move |_| match &input {
+                // Answered from the dialog callback not the press since no folder is picked yet
+                Some(ChoiceInput::Folder { title }) => {
+                    let dispatch = dispatch.clone();
+                    let title = title.clone();
+                    spawn(async move {
+                        if let Some(handle) = rfd::AsyncFileDialog::new()
+                            .set_title(title)
+                            .pick_folder()
+                            .await
+                        {
+                            dispatch.answer_prompt(Answer::new(id).with_folder(handle.path()));
+                        }
+                    });
+                }
+                // No picker here answering with `selection() == None` beats blocking the core
+                Some(ChoiceInput::Selection { hint }) => {
+                    tracing::warn!(
+                        choice = id,
+                        hint,
+                        "a prompt asked for a selection with no overlay to collect it"
+                    );
+                    dispatch.answer_prompt(Answer::new(id));
+                }
+                None => dispatch.answer_prompt(Answer::new(id)),
+            });
+            if is_secondary {
+                secondary = secondary.child(button);
+            } else {
+                primary = primary.child(button);
+            }
+        }
+
+        let buttons = rect()
+            .horizontal()
+            .content(Content::Flex)
+            .width(Size::fill())
+            .spacing(8.)
+            .child(secondary)
+            .child(primary);
+
+        OverlayPopup::new()
+            .overlay_level(OVERLAY_BASE_LEVEL + 3)
+            .on_close(move |_| close.dismiss_prompt())
+            .child(
+                rect()
+                    .width(Size::window_percent(100.))
+                    .height(Size::window_percent(100.))
+                    .center()
+                    .child(
+                        rect()
+                            .vertical()
+                            .width(Size::px(440.))
+                            .max_width(Size::window_percent(90.))
+                            .spacing(14.)
+                            .padding(Gaps::new_all(20.))
+                            .corner_radius(rounded(14.))
+                            .background(colors::card())
+                            .border(border_all_color(1., colors::component_border()))
+                            .child(
+                                label()
+                                    .text(prompt.title.clone())
+                                    .font_size(text_size(16.))
+                                    .font_weight(FontWeight::SEMI_BOLD)
+                                    .color(colors::fg_primary()),
+                            )
+                            .child(
+                                label()
+                                    .text(prompt.question.clone())
+                                    .font_size(text_size(12.))
+                                    .max_lines(6)
+                                    .width(Size::fill())
+                                    .color(colors::fg_secondary()),
+                            )
+                            .child(buttons),
+                    ),
+            )
+            .into_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oneclient_events::Choice;
+
+    fn prompt(choices: Vec<Choice>) -> PendingPromptView {
+        PendingPromptView {
+            title: "Title".to_string(),
+            question: "Question".to_string(),
+            choices,
+            dismiss: Some("Cancel".to_string()),
+        }
+    }
+
+    #[test]
+    fn the_rich_overlays_keep_their_own_prompts() {
+        for id in [
+            JAVA_CHOICE_DOWNLOAD,
+            UPDATE_CHOICE_INSTALL,
+            MICROSOFT_JAVA_CHOICE_INSTALL,
+        ] {
+            assert!(
+                claimed_elsewhere(&prompt(vec![Choice::primary(id, "Download")])),
+                "{id} has its own overlay"
+            );
+        }
+    }
+
+    #[test]
+    fn every_other_prompt_falls_through_to_the_generic_overlay() {
+        for choices in [
+            vec![Choice::new("launch", "Launch anyway")],
+            vec![Choice::primary("verify", "Verify and repair")],
+            vec![Choice::danger("delete", "Delete")],
+            Vec::new(),
+        ] {
+            assert!(
+                !claimed_elsewhere(&prompt(choices)),
+                "an unclaimed prompt must render somewhere"
+            );
+        }
+    }
+}

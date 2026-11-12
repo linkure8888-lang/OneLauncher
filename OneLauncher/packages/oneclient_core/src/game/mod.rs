@@ -1,0 +1,70 @@
+mod analytics;
+mod error;
+pub mod fabric;
+mod game_options;
+pub mod gpu;
+mod heal;
+mod launch;
+mod log_replay;
+pub(crate) mod natives;
+pub mod offline_mods;
+pub mod offline_skin;
+mod process;
+mod reattach;
+mod session;
+mod shared_dir;
+mod tail;
+pub mod world_backup;
+
+pub use analytics::{
+    Analytics, DayPlaytime, Persona, PlaytimeStats, ServerStat, WEEKDAY_LABELS, aggregate_servers,
+    cluster_analytics, global_analytics,
+};
+pub use oneclient_mc::{
+    append_profile_game_arguments, classpaths, download_to_path, fetch_bytes_verified,
+    get_classpath_library, get_library, java_arguments, main_class, minecraft_arguments,
+    processor_arguments,
+};
+pub mod crashdata;
+pub mod diagnosis;
+pub mod mod_problems;
+
+pub use crashdata::CrashData;
+pub use diagnosis::{CrashDiagnosis, diagnose, suspected_mods};
+pub use error::GameError;
+pub use fabric::{mods_folder_argument, uses_cluster_mods_folder};
+pub use game_options::{read_graphics_backend, write_graphics_backend};
+pub use heal::clear_zeroed_files;
+pub use launch::{
+    LaunchedGame, crash_mod_issues, is_running, launch_cluster, launch_cluster_with, repair_cluster,
+};
+pub use mod_problems::{ModProblem, ModProblemKind, ModRef};
+pub use offline_mods::{is_microsoft_only, sync_for_account as sync_offline_mods};
+pub use offline_skin::{
+    LibrarySkin, OfflineSkin, SkinModel, apply_library_skin, clean_skin_name, delete_library_skin,
+    import_library_skin, library_head_path, library_root, library_skin_path, list_library_skins,
+    load_offline_skin, remove_offline_cape, save_offline_skin, user_properties,
+};
+pub use oneclient_mc::{
+    DownloadPlan, GameVersionInfo, GameVersionKind, NativesMode, NativesReport, PlannedLibrary,
+    check_natives, confirm_incomplete_install, download_minecraft, download_version_info,
+    game_files_missing, get_game_versions, get_loader_version, get_loader_versions,
+    get_loaders_for_version, get_version_ids, get_versions_for_loader, is_version_updated,
+    libraries_missing, natives_missing, plan_downloads, resolve_minecraft_version, validate_rules,
+    verify_game_files,
+};
+pub use process::{
+    DirBusy, GameProcess, GameProcessManager, SyncBlock, SyncGuard, is_process_alive, kill_process,
+    process_start_time,
+};
+pub use reattach::recover_sessions;
+pub(crate) use shared_dir::lock_mods_sync;
+pub use shared_dir::{
+    DuplicateMods, dematerialize_content, import_manual_content, join_shared_folder,
+    leave_shared_folder, link_cluster_logs, materialize_content, shadowed_bundle_mods,
+    split_dedicated_packs, sync_cluster_mods, unlink_cluster_logs, write_allowed_symlinks,
+};
+pub use world_backup::{
+    WorldBackupError, WorldBackupInfo, WorldBackupReport, WorldBackupResult, backup_before_launch,
+    backup_world, backup_worlds, list_world_backups, restore_world_backup,
+};

@@ -1,0 +1,320 @@
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+#![recursion_limit = "256"]
+
+use freya::prelude::*;
+use oneclient_app::ipc::{self, Claim};
+use oneclient_app::state::{AppState, LauncherInit};
+use oneclient_app::{
+    Actions, ConfirmLinkOverlay, DisableConfirmState, DisableDependentsOverlay,
+    EssentialConfirmOverlay, EssentialGuardState, EventPump, LinkConfirmState, StartMaximizedState,
+    cli, constants, events, microsoft_java, platform, router, theme, translations,
+    use_provide_actions, use_provide_disable_confirm, use_provide_essential_guard,
+    use_provide_link_confirm, use_provide_start_maximized, use_provide_station,
+    use_settings_snapshot,
+};
+use std::cell::Cell;
+use tokio::runtime::Builder;
+
+struct OneClientApp {
+    needs_location: bool,
+    start_maximized: bool,
+    boot_launch: Cell<Option<String>>,
+    boot_share: Cell<Option<String>>,
+}
+
+impl App for OneClientApp {
+    fn render(&self) -> impl IntoElement {
+        let needs_location = self.needs_location;
+
+        // Radio state is `!Send` so every writer runs on the UI thread `spawn_in_window`
+        let station = use_provide_station(move || AppState {
+            launcher: LauncherInit {
+                needs_location,
+                ..LauncherInit::default()
+            },
+            ..AppState::default()
+        });
+
+        let boot_launch = self.boot_launch.take();
+        let boot_share = self.boot_share.take();
+
+        let actions = use_hook(move || {
+            let (signals_tx, signals_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (events_bus, events_rx) = oneclient_events::EventBus::channel();
+            let actions = Actions::new(station, signals_tx, events_bus.clone());
+
+            spawn_in_window(
+                EventPump {
+                    events: events_rx,
+                    signals: signals_rx,
+                    station,
+                    actions: actions.clone(),
+                }
+                .run(),
+            );
+
+            if !needs_location {
+                let startup = actions.clone();
+                let rescue_bus = events_bus.clone();
+                spawn_in_window(async move {
+                    match events::start_launcher(station, events_bus).await {
+                        // Must follow startup `sync_bundles` needs the launcher handle and firing
+                        // it early leaves `syncing_bundles` stuck disabling every launch button
+                        Ok(()) => {
+                            startup.sync_bundles();
+                            startup.start_cloud_sync();
+                            Actions::check_sessions();
+                            microsoft_java::spawn_auto_install();
+                        }
+                        Err(err) => {
+                            events::report_startup_failure(&station, &err);
+                            oneclient_app::updater::spawn_update_check(false, rescue_bus);
+                        }
+                    }
+                });
+            }
+
+            if let Some(folder) = boot_launch {
+                actions.request_launch_by_folder(folder);
+            }
+            if let Some(code) = boot_share {
+                actions.request_share_import(code);
+            }
+
+            actions
+        });
+
+        use_provide_actions(&actions);
+
+        let link_confirm = use_state(|| None::<String>);
+        use_provide_link_confirm(LinkConfirmState(link_confirm));
+
+        let disable_confirm = use_state(|| None);
+        use_provide_disable_confirm(DisableConfirmState(disable_confirm));
+
+        let essential_guard = use_state(|| None);
+        use_provide_essential_guard(EssentialGuardState(essential_guard));
+
+        use_provide_start_maximized(StartMaximizedState(self.start_maximized));
+
+        let mut palette_revision = use_state(|| 0u32);
+        theme::colors::bind_revision(palette_revision);
+        let appearance = use_settings_snapshot().settings;
+        let platform = Platform::get().current_window();
+        let system_dark = *platform.preferred_theme.read() == PreferredTheme::Dark;
+        let scale_factor = *platform.scale_factor.read() as f32;
+        let theme_id = theme::system_aware(&appearance.theme, system_dark);
+        theme::colors::apply(&theme_id, appearance.accent_color.as_deref());
+        theme::set_scale_factor(scale_factor);
+        let deps = (theme_id, appearance.accent_color, scale_factor.to_bits());
+        use_side_effect_with_deps(&deps, move |_| {
+            *palette_revision.write() += 1;
+        });
+
+        let mut language_revision = use_state(|| 0u32);
+        translations::bind_revision(language_revision);
+        use_hook(move || {
+            let mut rx = translations::subscribe();
+            spawn(async move {
+                while rx.changed().await.is_ok() {
+                    *language_revision.write() += 1;
+                }
+            });
+        });
+        use_side_effect_with_deps(&appearance.language, |language| {
+            translations::select(language.clone());
+        });
+
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .font_family(theme::font())
+            .font_size(theme::text_size(16.))
+            .child(ConfirmLinkOverlay)
+            .child(DisableDependentsOverlay)
+            .child(EssentialConfirmOverlay)
+            .child(router())
+    }
+}
+
+fn main() {
+    let cli = cli::parse();
+    let portable = oneclient_app::portable::init(cli.portable);
+
+    let mut builder = Builder::new_multi_thread();
+    builder.enable_all().max_blocking_threads(64);
+
+    // Debug builds emit unoptimized async code that can overflow the default 2MB stack
+    #[cfg(debug_assertions)]
+    builder.thread_stack_size(3 * 1024 * 1024);
+
+    let rt = builder.build().unwrap();
+    let _tokio_guard = rt.enter();
+
+    let adopted = if portable {
+        Ok(None)
+    } else {
+        rt.block_on(oneclient_core::relocate::adopt_legacy_dir())
+    };
+
+    // no settings file is the sign of a fresh install, but not proof of one
+    let never_set_up = oneclient_common::paths::settings_file()
+        .map(|path| !path.exists())
+        .unwrap_or(false);
+    let has_database = oneclient_common::paths::database_file()
+        .map(|path| path.exists())
+        .unwrap_or(false);
+    let was_damaged = oneclient_common::paths::damaged_settings_file()
+        .map(|path| path.exists())
+        .unwrap_or(false);
+    let needs_location = never_set_up && !has_database && !was_damaged;
+
+    let mut unprotected = None;
+    match rt.block_on(ipc::claim(&cli)) {
+        Claim::Forwarded => return,
+        Claim::Primary(listener) => ipc::listen(listener),
+        Claim::Solo(reason) => unprotected = Some(reason),
+    }
+
+    let settings = rt.block_on(oneclient_core::settings::store::load_settings(None));
+
+    oneclient_common::consent::init(settings.declined_tos);
+
+    let abandoned_move = settings
+        .data_dir
+        .clone()
+        .filter(|dir| oneclient_core::relocate::incomplete(dir));
+
+    if !portable
+        && let Some(dir) = settings.data_dir.clone()
+        && abandoned_move.is_none()
+    {
+        oneclient_common::paths::set_data_dir(dir);
+    }
+
+    if settings.log_debug {
+        oneclient_core::logger::init_debug()
+    } else {
+        oneclient_core::logger::init()
+    }
+    .expect("Failed to initialize logger");
+
+    match adopted {
+        Ok(Some(from)) => {
+            tracing::info!(from = %from.display(), "moved out of the old launcher folder")
+        }
+        Ok(None) => {}
+        Err(err) => tracing::error!("{err}"),
+    }
+
+    if let Some(reason) = unprotected {
+        tracing::warn!("no single-instance endpoint, a second launcher can start: {reason}");
+    }
+
+    if !portable {
+        match oneclient_app::shortcut::launcher_exe()
+            .and_then(|exe| oneclient_app::protocol::register(&exe))
+        {
+            Ok(()) => {}
+            Err(err) => tracing::warn!(
+                "could not register the {}:// handler: {err:#}",
+                oneclient_app::protocol::SCHEME
+            ),
+        }
+    }
+
+    if let Some(dir) = abandoned_move {
+        tracing::error!(
+            path = %dir.display(),
+            "a move of the game data folder never finished; staying on the old folder"
+        );
+    }
+
+    let _sentry_guard = oneclient_core::reporting::init(settings.crash_reporting);
+
+    #[cfg(target_os = "macos")]
+    oneclient_app::platform::macos::loop_memory_collector();
+
+    theme::colors::apply(&settings.theme, settings.accent_color.as_deref());
+    translations::init(settings.language.clone());
+
+    let start_maximized = settings.start_maximized;
+    let show_tray_icon = settings.show_tray_icon;
+
+    let window_config = WindowConfig::new_app(OneClientApp {
+        needs_location,
+        start_maximized,
+        boot_launch: Cell::new(cli.launch.clone()),
+        boot_share: Cell::new(cli.share.clone()),
+    })
+    .with_title(constants::WINDOW_TITLE)
+    .with_app_id(constants::WINDOW_APP_ID)
+    .with_icon(LaunchConfig::window_icon(include_bytes!(
+        "../icons/128x128.png"
+    )))
+    .with_size(1200., 800.)
+    .with_min_size(800., 600.)
+    .with_transparency(false)
+    .with_background(Color::BLACK)
+    // A half-copied data folder is unrecoverable, so the window refuses to
+    // close while one is being moved; the move screen says as much
+    .with_on_close(|_, _| {
+        if oneclient_core::relocate::in_progress() {
+            tracing::warn!("close request ignored, the data folder is still being moved");
+        } else {
+            oneclient_app::close_chat_window();
+            ipc::send(ipc::IpcCommand::Close);
+        }
+        CloseDecision::KeepOpen
+    });
+
+    #[cfg(target_os = "macos")]
+    let window_config =
+        window_config
+            .with_decorations(true)
+            .with_window_attributes(move |attrs, _| {
+                use freya::winit::platform::macos::WindowAttributesExtMacOS;
+                attrs
+                    .with_title_hidden(true)
+                    .with_titlebar_transparent(true)
+                    .with_titlebar_buttons_hidden(true)
+                    .with_fullsize_content_view(true)
+                    .with_has_shadow(true)
+                    .with_maximized(start_maximized)
+            });
+
+    #[cfg(not(target_os = "macos"))]
+    let window_config = window_config
+        .with_decorations(false)
+        .with_window_attributes(move |attrs, _| attrs.with_maximized(start_maximized));
+
+    let mut launch_config = LaunchConfig::new()
+        .with_window(window_config)
+        .with_gpu_resource_cache_limit(
+            std::env::var("ONECLIENT_GPU_CACHE_BYTES")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(128 * 1024 * 1024),
+        )
+        .with_plugin(freya::borderless::BorderlessPlugin::new())
+        .with_plugin(freya::metrics::MetricsPlugin::default())
+        .with_default_font(theme::DEFAULT_FONT);
+
+    #[cfg(target_os = "windows")]
+    {
+        launch_config = launch_config.with_plugin(platform::frame::FramePlugin);
+    }
+
+    if show_tray_icon {
+        launch_config = launch_config.with_tray(platform::tray::build, platform::tray::handle);
+    }
+
+    for (font, bytes) in theme::load_fonts() {
+        launch_config = launch_config.with_font(font, bytes);
+    }
+
+    launch(launch_config);
+}

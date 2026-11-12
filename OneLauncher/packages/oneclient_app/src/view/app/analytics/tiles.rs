@@ -1,0 +1,263 @@
+use freya::prelude::*;
+
+use oneclient_core::game::{Analytics, Persona};
+
+use crate::components::{Icon, IconType};
+use crate::i18n::{t, tf};
+use crate::theme::{colors, rounded, text_size};
+use crate::ui::{border_all_color, columns_for, flow_grid};
+use crate::utils::format_duration;
+
+use super::card;
+
+pub(super) fn tiles_row(analytics: &Analytics, _force_all: bool) -> Element {
+    TilesRow {
+        analytics: analytics.clone(),
+    }
+    .into_element()
+}
+
+const TILE_GAP: f32 = 14.;
+const TILE_MIN_W: f32 = 190.;
+const TILE_H: f32 = 104.;
+
+#[derive(PartialEq)]
+struct TilesRow {
+    analytics: Analytics,
+}
+
+impl Component for TilesRow {
+    fn render(&self) -> impl IntoElement {
+        let width = use_state(|| 0f32);
+        let w = *width.read();
+        let cols = match columns_for(w, TILE_MIN_W, 4, TILE_GAP) {
+            3 => 2,
+            n => n,
+        };
+
+        let stats = &self.analytics.playtime;
+        let avg_session = if stats.session_count > 0 {
+            stats.total_secs / stats.session_count as i64
+        } else {
+            0
+        };
+
+        let hero = hero_tile(
+            t("oneclient.analytics.tiles.total_playtime"),
+            format_duration(stats.total_secs),
+            if stats.session_count == 1 {
+                tf(
+                    "oneclient.analytics.tiles.over_sessions.one",
+                    &[&stats.session_count],
+                )
+            } else {
+                tf(
+                    "oneclient.analytics.tiles.over_sessions.other",
+                    &[&stats.session_count],
+                )
+            },
+        );
+
+        let mut rest = vec![
+            stat_tile(
+                t("oneclient.analytics.tiles.sessions"),
+                stats.session_count.to_string(),
+            ),
+            stat_tile(
+                t("oneclient.analytics.tiles.avg_session"),
+                format_duration(avg_session),
+            ),
+            stat_tile(
+                t("oneclient.analytics.tiles.longest_session"),
+                format_duration(stats.longest_session_secs),
+            ),
+            stat_tile(
+                t("oneclient.analytics.tiles.day_streak"),
+                streak_value(stats.current_streak),
+            ),
+            stat_tile(
+                t("oneclient.analytics.tiles.best_streak"),
+                streak_value(stats.longest_streak),
+            ),
+            stat_tile(
+                t("oneclient.analytics.tiles.days_played"),
+                stats.active_days.to_string(),
+            ),
+        ];
+
+        let mut root = rect().vertical().width(Size::fill()).spacing(TILE_GAP);
+
+        if cols >= 3 {
+            let alongside: Vec<Element> = rest.drain(..(cols - 2).min(rest.len())).collect();
+            let col_w = (w - TILE_GAP * (cols - 1) as f32) / cols as f32;
+            let hero_w = if col_w > 0. {
+                Size::px(col_w * 2. + TILE_GAP)
+            } else {
+                Size::flex(2.0)
+            };
+            let mut lead = rect()
+                .horizontal()
+                .content(Content::Flex)
+                .width(Size::fill())
+                .height(Size::px(TILE_H))
+                .spacing(TILE_GAP)
+                .child(rect().width(hero_w).height(Size::fill()).child(hero));
+            for tile in alongside {
+                lead = lead.child(
+                    rect()
+                        .width(Size::flex(1.0))
+                        .height(Size::fill())
+                        .child(tile),
+                );
+            }
+            root = root.child(lead);
+        } else {
+            root = root.child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::px(TILE_H))
+                    .child(hero),
+            );
+        }
+
+        let rows: Vec<Element> = rest
+            .into_iter()
+            .map(|tile| {
+                rect()
+                    .height(Size::px(TILE_H))
+                    .width(Size::flex(1.0))
+                    .child(tile)
+                    .into_element()
+            })
+            .collect();
+
+        root.child(flow_grid(rows, cols, width, TILE_GAP))
+    }
+}
+
+fn streak_value(days: usize) -> String {
+    tf("oneclient.analytics.tiles.streak_days", &[&days])
+}
+
+fn hero_tile(caption: &str, value: String, note: String) -> Element {
+    card()
+        .width(Size::fill())
+        .height(Size::fill())
+        .main_align(Alignment::SpaceBetween)
+        .background(colors::brand().with_a(18))
+        .border(border_all_color(1., colors::brand().with_a(90)))
+        .child(
+            label()
+                .text(caption.to_string())
+                .font_size(text_size(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            rect()
+                .horizontal()
+                .cross_align(Alignment::End)
+                .spacing(8.)
+                .child(
+                    label()
+                        .text(value)
+                        .font_size(text_size(30.))
+                        .font_weight(FontWeight::BOLD)
+                        .max_lines(1)
+                        .color(colors::fg_primary()),
+                )
+                .child(
+                    rect().margin(Gaps::new(0., 0., 5., 0.)).child(
+                        label()
+                            .text(note)
+                            .font_size(text_size(12.))
+                            .max_lines(1)
+                            .color(colors::fg_secondary()),
+                    ),
+                ),
+        )
+        .into_element()
+}
+
+fn stat_tile(caption: &str, value: String) -> Element {
+    card()
+        .width(Size::fill())
+        .height(Size::fill())
+        .main_align(Alignment::SpaceBetween)
+        .child(
+            label()
+                .text(caption.to_string())
+                .font_size(text_size(12.))
+                .max_lines(1)
+                .width(Size::fill())
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            label()
+                .text(value)
+                .font_size(text_size(24.))
+                .font_weight(FontWeight::BOLD)
+                .max_lines(1)
+                .color(colors::fg_primary()),
+        )
+        .into_element()
+}
+
+pub(super) fn personas_row(personas: &[Persona]) -> Element {
+    rect()
+        .horizontal()
+        .content(Content::Wrap {
+            wrap_spacing: Some(10.),
+        })
+        .width(Size::fill())
+        .spacing(10.)
+        .children(personas.iter().map(|p| persona_badge(*p)))
+        .into_element()
+}
+
+fn persona_badge(persona: Persona) -> Element {
+    rect()
+        .horizontal()
+        .cross_align(Alignment::Center)
+        .spacing(7.)
+        .padding(Gaps::new_symmetric(6., 11.))
+        .corner_radius(rounded(8.))
+        .background(colors::component_bg())
+        .border(border_all_color(1., colors::component_border()))
+        .child(
+            Icon::new(persona_icon(persona))
+                .size(13.)
+                .color(colors::brand()),
+        )
+        .child(
+            label()
+                .text(persona.title().to_string())
+                .font_size(text_size(13.))
+                .font_weight(FontWeight::SEMI_BOLD)
+                .max_lines(1)
+                .color(colors::fg_primary()),
+        )
+        .child(
+            label()
+                .text(persona.description().to_string())
+                .font_size(text_size(11.))
+                .max_lines(1)
+                .color(colors::fg_secondary()),
+        )
+        .into_element()
+}
+
+fn persona_icon(persona: Persona) -> IconType {
+    match persona {
+        Persona::Veteran => IconType::ClockRewind,
+        Persona::Marathoner => IconType::Maximize01,
+        Persona::Regular => IconType::CheckCircle,
+        Persona::Loyalist => IconType::Key01,
+        Persona::Explorer => IconType::Globe01,
+        Persona::NightOwl => IconType::Eye,
+        Persona::EarlyBird => IconType::Bell01,
+        Persona::WeekendWarrior => IconType::Calendar,
+        Persona::Gamer => IconType::Rocket02,
+        Persona::Sprinter => IconType::Play,
+    }
+}

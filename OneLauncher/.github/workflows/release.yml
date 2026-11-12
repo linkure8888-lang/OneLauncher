@@ -1,0 +1,236 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create, e.g. v2.10.2"
+        required: true
+        default: "v2.10.2"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: "true"
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (NSIS)
+            os: windows-latest
+            formats: "nsis"
+            artifact: windows
+            platform: windows-x86_64
+            target: ""
+          - name: Linux (deb + AppImage)
+            os: ubuntu-22.04
+            formats: "deb appimage"
+            artifact: linux
+            platform: linux-x86_64
+            target: ""
+          - name: macOS arm64 (dmg)
+            os: macos-latest
+            formats: "dmg"
+            artifact: macos-arm64
+            platform: darwin-aarch64
+            target: aarch64-apple-darwin
+          - name: macOS Intel (dmg)
+            os: macos-latest
+            formats: "dmg"
+            artifact: macos-x64
+            platform: darwin-x86_64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.artifact }}
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config clang python3 \
+            libfontconfig-dev libfreetype-dev \
+            libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libdbus-1-dev \
+            libfuse2 libxdo-dev desktop-file-utils
+
+      # Only export the key when the secret really exists: an empty value makes
+      # cargo-packager try to parse "" as a key and fail after the whole build.
+      - name: Enable updater signing
+        shell: bash
+        env:
+          KEY: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY }}
+          PASS: ${{ secrets.CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEY:-}" ]; then
+            echo "No signing key secret; the release will ship without auto-update."
+            exit 0
+          fi
+          {
+            echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY<<__KEY__"
+            printf '%s\n' "$KEY"
+            echo "__KEY__"
+            echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD<<__PASS__"
+            printf '%s\n' "${PASS:-}"
+            echo "__PASS__"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release -p oneclient_app ${TARGET:+--target "$TARGET"}
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+
+      # A plain tarball is the Linux artifact: it needs no dpkg, no AppImage
+      # tooling and no desktop integration, so it cannot fail after the build.
+      # deb and AppImage kept failing in packaging and are on the backlog.
+      - name: Package (Linux tarball)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f&&/^version/{gsub(/[^0-9.]/,"");print;exit}' Cargo.toml)
+          mkdir -p dist
+          tar -czf "dist/RemixClient_${VERSION}_linux_x86_64.tar.gz" -C target/release oneclient_app
+          ls -la dist
+
+      - name: Package
+        if: runner.os != 'Linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo packager -p oneclient_app --release -f ${{ matrix.formats }} ${TARGET:+--target "$TARGET"} --verbose
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          shopt -s nullglob
+          for dir in target/release target/*/release; do
+            [ -d "$dir" ] || continue
+            for f in "$dir"/*.exe "$dir"/*.msi "$dir"/*.deb "$dir"/*.AppImage "$dir"/*.dmg "$dir"/*.tar.gz; do
+              case "$(basename "$f")" in
+                oneclient_app.exe) continue ;;
+              esac
+              cp "$f" "dist/$(basename "$f" | sed 's/^oneclient_app/RemixClient/')"
+            done
+          done
+          # Signatures are named after the original artifact; rename them to match.
+          for f in target/release/*.sig target/*/release/*.sig; do
+            [ -f "$f" ] || continue
+            cp "$f" "dist/$(basename "$f" | sed 's/^oneclient_app/RemixClient/')"
+          done
+          ls -la dist || true
+
+      - name: Updater entry for this platform
+        if: ${{ hashFiles('target/release/*.sig', 'target/*/release/*.sig') != '' }}
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, json, os
+          version = os.popen(
+              "awk '/^\\[workspace\\.package\\]/{f=1;next} /^\\[/{f=0} f&&/^version/{gsub(/[^0-9.]/,\"\");print;exit}' Cargo.toml"
+          ).read().strip()
+          sigs = sorted(glob.glob("dist/*.sig"))
+          if not sigs:
+              raise SystemExit(0)
+          sig = sigs[0]
+          artifact = sig[:-4]
+          url = (f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                 f"/releases/download/{os.environ['TAG']}/{os.path.basename(artifact)}")
+          entry = {
+              "version": version,
+              "platforms": {os.environ["PLATFORM"]: {
+                  "signature": open(sig).read().strip(),
+                  "url": url,
+              }},
+          }
+          out = f"dist/updater-entry-{os.environ['PLATFORM']}.json"
+          json.dump(entry, open(out, "w"), indent=2)
+          print(open(out).read())
+          PY
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remixclient-${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: warn
+
+  publish:
+    name: Publish release
+    needs: build
+    if: ${{ always() && needs.build.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: remixclient-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Merge updater manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, json, datetime, os
+          entries = sorted(glob.glob("artifacts/updater-entry-*.json"))
+          merged = {"version": None, "notes": "", "pub_date": None, "platforms": {}}
+          for path in entries:
+              data = json.load(open(path))
+              merged["version"] = data.get("version") or merged["version"]
+              merged["platforms"].update(data.get("platforms", {}))
+          if merged["platforms"]:
+              merged["pub_date"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+              merged["notes"] = f"RemixClient {merged['version']} for " + ", ".join(sorted(merged["platforms"]))
+              os.makedirs("dist", exist_ok=True)
+              json.dump(merged, open("dist/latest.json", "w"), indent=2)
+              print(open("dist/latest.json").read())
+          else:
+              print("no signed platform entries; skipping latest.json")
+          PY
+
+      - name: Publish assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: RemixClient ${{ inputs.tag || github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          files: |
+            artifacts/*.exe
+            artifacts/*.msi
+            artifacts/*.deb
+            artifacts/*.AppImage
+            artifacts/*.dmg
+            artifacts/*.tar.gz
+            artifacts/*.sig
+            dist/latest.json

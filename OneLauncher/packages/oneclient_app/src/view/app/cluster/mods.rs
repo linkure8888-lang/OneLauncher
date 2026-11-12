@@ -1,0 +1,165 @@
+use std::collections::HashSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::PathBuf;
+
+use freya::prelude::*;
+use oneclient_content::packages::ContentType;
+
+use crate::components::{CopyStatus, PackageEntry};
+use crate::hooks::{
+    bundle_overrides_map, bundles_with_status_items, cluster_content_items, modpack_sources_map,
+    stale_hashes, use_bisect, use_bundle_overrides, use_bundles_with_status, use_cluster_content,
+    use_modpack_sources, use_mods_folder_sync, use_package_updates, use_shadowed_mods,
+};
+use crate::i18n::t;
+use crate::layout::cluster_content;
+
+use super::cluster_not_found;
+use super::package_manager::{
+    PackageManager, bundle_categories, bundle_packages, use_content_meta,
+};
+use crate::hooks::use_cluster;
+
+#[derive(PartialEq)]
+pub struct ClusterMods {
+    pub cluster_id: i64,
+}
+
+impl Component for ClusterMods {
+    fn render(&self) -> impl IntoElement {
+        let content = use_cluster_content(self.cluster_id, ContentType::Mod);
+        let bundles = use_bundles_with_status(self.cluster_id);
+        let overrides = use_bundle_overrides(self.cluster_id);
+        let updates = use_package_updates(self.cluster_id);
+        let sources = use_modpack_sources(self.cluster_id);
+        let shadowed = use_shadowed_mods(self.cluster_id);
+        let bisect = use_bisect(self.cluster_id);
+        let bundle_items = bundles_with_status_items(&bundles);
+        let content_items = cluster_content_items(&content);
+        let meta = use_content_meta(&content_items, &bundle_items, ContentType::Mod);
+
+        let Some(cluster) = use_cluster(self.cluster_id) else {
+            return cluster_not_found();
+        };
+
+        let all_categories = bundle_categories(&bundle_items);
+        let mut items = bundle_packages(
+            content_items,
+            &bundle_items,
+            &bundle_overrides_map(&overrides),
+            &meta,
+            &stale_hashes(&updates),
+            ContentType::Mod,
+        );
+        let sources = modpack_sources_map(&sources);
+        let skipped: HashSet<&String> = shadowed.copies.values().flatten().collect();
+        for item in &mut items {
+            item.locked = bisect.is_some();
+            item.modpack = item
+                .hash
+                .as_ref()
+                .and_then(|hash| sources.get(hash).cloned());
+            let Some(hash) = &item.hash else {
+                continue;
+            };
+            item.copy_status = skipped.contains(hash).then_some(CopyStatus::Skipped);
+            item.bisect_role = bisect.as_ref().and_then(|status| status.role_of(hash));
+        }
+        let present: HashSet<&String> =
+            items.iter().filter_map(|item| item.hash.as_ref()).collect();
+        let ignored: HashSet<String> = shadowed
+            .copies
+            .iter()
+            .filter(|(used, _)| present.contains(used))
+            .flat_map(|(_, hashes)| hashes.iter().cloned())
+            .collect();
+        let (copies, mut items): (Vec<_>, Vec<_>) = items.into_iter().partition(|item| {
+            item.hash
+                .as_ref()
+                .is_some_and(|hash| ignored.contains(hash))
+        });
+        for item in &mut items {
+            if let Some(hashes) = item
+                .hash
+                .as_ref()
+                .and_then(|hash| shadowed.copies.get(hash))
+            {
+                item.copies = copies
+                    .iter()
+                    .filter(|copy| copy.hash.as_ref().is_some_and(|hash| hashes.contains(hash)))
+                    .cloned()
+                    .collect();
+            }
+        }
+        let identity = |item: &PackageEntry| {
+            (!item.author.is_empty())
+                .then(|| (item.name.to_lowercase(), item.author.to_lowercase()))
+        };
+        let mut folded = HashSet::new();
+        for i in 0..items.len() {
+            if items[i].in_bundle() {
+                continue;
+            }
+            let Some(own) = identity(&items[i]) else {
+                continue;
+            };
+            let matches: Vec<usize> = (0..items.len())
+                .filter(|&j| {
+                    items[j].in_bundle()
+                        && items[j].copies.is_empty()
+                        && !folded.contains(&j)
+                        && identity(&items[j]).as_ref() == Some(&own)
+                })
+                .collect();
+            for j in matches {
+                folded.insert(j);
+                let copy = items[j].clone();
+                items[i].copies.push(copy);
+            }
+        }
+        let mut index = 0;
+        items.retain(|_| {
+            index += 1;
+            !folded.contains(&(index - 1))
+        });
+
+        cluster_content()
+            .child(ModsFolderSync {
+                cluster_id: self.cluster_id,
+                folder: oneclient_common::paths::cluster_mods_dir(&cluster.folder_name).ok(),
+            })
+            .child(
+                PackageManager::new(
+                    t("oneclient.cluster.mods.title"),
+                    t("oneclient.cluster.package_manager.noun.mod.other"),
+                    "mod",
+                    ContentType::Mod,
+                    self.cluster_id,
+                    items,
+                    all_categories,
+                )
+                .bisecting(bisect.is_some())
+                .into_element(),
+            )
+            .into_element()
+    }
+}
+
+#[derive(PartialEq)]
+struct ModsFolderSync {
+    cluster_id: i64,
+    folder: Option<PathBuf>,
+}
+
+impl Component for ModsFolderSync {
+    fn render(&self) -> impl IntoElement {
+        use_mods_folder_sync(self.cluster_id, self.folder.clone());
+        rect()
+    }
+
+    fn render_key(&self) -> DiffKey {
+        let mut hasher = DefaultHasher::new();
+        (self.cluster_id, &self.folder).hash(&mut hasher);
+        DiffKey::U64(hasher.finish())
+    }
+}

@@ -1,0 +1,180 @@
+use std::borrow::Cow;
+
+use freya::prelude::*;
+use oneclient_content::packages::ProviderId;
+
+use crate::{AppAssets, theme, theme::colors};
+
+#[derive(Clone, Copy, PartialEq)]
+pub struct IconTint(pub State<Color>);
+
+#[derive(PartialEq)]
+pub struct Icon {
+    pub icon: IconType,
+    pub size_px: f32,
+    pub color: Option<Color>,
+    pub rotation: Option<f32>,
+}
+
+impl Icon {
+    pub fn new(icon: impl Into<IconType>) -> Self {
+        let icon = icon.into();
+        let color = match icon {
+            IconType::Modrinth => Some(colors::MODRINTH_COLOR),
+            IconType::Curseforge => Some(colors::CURSEFORGE_COLOR),
+            _ => None,
+        };
+
+        Self {
+            icon,
+            size_px: 24.,
+            color,
+            rotation: None,
+        }
+    }
+
+    pub fn size(mut self, size_px: f32) -> Self {
+        self.size_px = size_px;
+        self
+    }
+
+    pub fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
+        self
+    }
+
+    /// Degrees clockwise
+    pub fn rotate(mut self, degrees: f32) -> Self {
+        self.rotation = Some(degrees);
+        self
+    }
+}
+
+impl Component for Icon {
+    fn render(&self) -> impl IntoElement {
+        let (path, size): (Cow<'static, str>, f32) = match theme::pixel_icon(self.icon.path()) {
+            Some((pixel, cells)) => (pixel.into(), theme::pixel_icon_size(self.size_px, cells)),
+            None => (self.icon.path().into(), self.size_px),
+        };
+        let load = {
+            let path = path.clone();
+            move || {
+                let bytes = AppAssets::get_bytes(&path).unwrap_or_default();
+                (path, bytes)
+            }
+        };
+        let mut bytes = use_state(load.clone());
+        if bytes.peek().0 != path {
+            bytes.set(load());
+        }
+        let tint = use_hook(try_consume_context::<IconTint>);
+
+        let color = self
+            .color
+            .or_else(|| tint.map(|tint| *tint.0.read()))
+            .unwrap_or_else(colors::fg_primary);
+
+        SvgViewer::new((path, bytes.peek().1.clone()))
+            .show_loader(false)
+            .width(Size::px(size))
+            .height(Size::px(size))
+            .color(color)
+            .map(self.rotation, |svg, degrees| svg.rotation(degrees))
+    }
+}
+
+impl From<ProviderId> for IconType {
+    fn from(val: ProviderId) -> Self {
+        match val {
+            ProviderId::Modrinth => IconType::Modrinth,
+            ProviderId::CurseForge => IconType::Curseforge,
+            ProviderId::Local => IconType::Folder,
+        }
+    }
+}
+
+#[derive(oneclient_macro::IconNamed, Debug, PartialEq, Clone, Copy)]
+#[allow(dead_code)]
+pub enum IconType {
+    AlertCircle,
+    AlertTriangle,
+    Announcement01,
+    ArrowLeft,
+    ArrowRight,
+    Brush01,
+    BarChartSquare02,
+    Bell01,
+    Calendar,
+    CheckCircle,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    ClipboardCheck,
+    ClockRewind,
+    CodeSnippet02,
+    Colors,
+    Copy01,
+    Curseforge,
+    Database01,
+    Discord,
+    DotsGrid,
+    DotsVertical,
+    Download01,
+    DownloadCloud02,
+    Eye,
+    FaceSmile,
+    File02,
+    FilePlus02,
+    FileX02,
+    Folder,
+    FolderCheck,
+    FolderDownload,
+    Github,
+    Globe01,
+    HelpCircle,
+    IconLogo,
+    InfoCircle,
+    Key01,
+    LayoutRight,
+    LayoutTop,
+    LineChartUp01,
+    Link03,
+    LinkExternal01,
+    Loading02,
+    LogOut01,
+    Maximize01,
+    MessageTextSquare01,
+    Minus,
+    Modrinth,
+    Moon01,
+    OnboardingAccount,
+    OnboardingComplete,
+    OnboardingFolder,
+    OnboardingLanguage,
+    OnboardingMigration,
+    OnboardingPreferences,
+    OnboardingTerms,
+    PaintPour,
+    ParagraphWrap,
+    Pencil01,
+    Play,
+    Plus,
+    RefreshCcw02,
+    RefreshCw01,
+    Rocket02,
+    SearchMd,
+    Send01,
+    Settings01,
+    Settings02,
+    Settings04,
+    Share01,
+    Sliders04,
+    Square,
+    Terminal,
+    Trash01,
+    Users01,
+    XClose,
+    X,
+}

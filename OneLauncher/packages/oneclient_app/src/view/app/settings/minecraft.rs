@@ -1,0 +1,528 @@
+use freya::prelude::*;
+use oneclient_common::Patch;
+use oneclient_core::settings::{
+    GameSettingsProfile, PackageUpdateMode, ProfileUpdate, Resolution, SettingsOsExtra,
+};
+
+use super::settings_page;
+use crate::components::{
+    Dropdown, Icon, IconType, TextInput, memory_field, toggle, validate_number,
+};
+use crate::hooks::{use_dispatch, use_settings_snapshot};
+use crate::i18n::t;
+use crate::theme::colors;
+use crate::view::app::settings::{resettable, resettable_all, section_header, settings_row};
+
+#[derive(PartialEq)]
+pub struct SettingsMinecraft;
+
+impl Component for SettingsMinecraft {
+    fn render(&self) -> impl IntoElement {
+        let settings = use_settings_snapshot().settings;
+        let profile = settings.global_game_settings.clone();
+        let defaults = GameSettingsProfile::default_global_profile();
+        let dispatch = use_dispatch();
+
+        let fullscreen = use_state({
+            let v = profile.force_fullscreen.unwrap_or(false);
+            move || v
+        });
+        let width = use_state({
+            let v = profile
+                .resolution
+                .map(|r| r.width.to_string())
+                .unwrap_or_default();
+            move || v
+        });
+        let height = use_state({
+            let v = profile
+                .resolution
+                .map(|r| r.height.to_string())
+                .unwrap_or_default();
+            move || v
+        });
+        let memory = use_state({
+            let v = profile.mem_max.map(|m| m.to_string()).unwrap_or_default();
+            move || v
+        });
+        let jvm_args = use_state({
+            let v = profile.launch_args.clone().unwrap_or_default();
+            move || v
+        });
+        let game_args = use_state({
+            let v = profile.game_args.clone().unwrap_or_default();
+            move || v
+        });
+        let pre_launch_command = use_state({
+            let v = profile.hook_pre.clone().unwrap_or_default();
+            move || v
+        });
+        let wrapper_command = use_state({
+            let v = profile.hook_wrapper.clone().unwrap_or_default();
+            move || v
+        });
+        let post_exit_command = use_state({
+            let v = profile.hook_post.clone().unwrap_or_default();
+            move || v
+        });
+        let update_mode = use_state({
+            let v = profile.browser_update_mode.unwrap_or_default();
+            move || v
+        });
+
+        let backup_worlds = use_state({
+            let v = settings.backup_worlds_before_launch;
+            move || v
+        });
+
+        let gpu = use_state({
+            let v = profile.gpu().map(str::to_owned);
+            move || v
+        });
+        let gpus = use_state(oneclient_core::game::gpu::detect);
+
+        let mut first = use_state(|| true);
+        use_side_effect(move || {
+            let update = build_update(
+                *fullscreen.read(),
+                &width.read(),
+                &height.read(),
+                &memory.read(),
+                &jvm_args.read(),
+                &game_args.read(),
+                &pre_launch_command.read(),
+                &wrapper_command.read(),
+                &post_exit_command.read(),
+                *update_mode.read(),
+            );
+            let selected_gpu = gpu.read().clone();
+            let backup = *backup_worlds.read();
+            if *first.peek() {
+                first.set(false);
+                return;
+            }
+
+            let update = with_gpu(update, selected_gpu);
+
+            dispatch.update_global_profile(update);
+            dispatch.edit_settings(|next| next.backup_worlds_before_launch = backup);
+        });
+
+        let page = settings_page()
+            .child(section_header(t(
+                "oneclient.settings.minecraft.section.game",
+            )))
+            .child(settings_row(
+                IconType::Maximize01,
+                t("oneclient.settings.minecraft.force_fullscreen.title"),
+                t("oneclient.settings.minecraft.force_fullscreen.description"),
+                resettable(
+                    toggle(fullscreen),
+                    fullscreen,
+                    defaults.force_fullscreen.unwrap_or(false),
+                ),
+            ))
+            .child(settings_row(
+                IconType::LayoutTop,
+                t("oneclient.settings.minecraft.resolution.title"),
+                t("oneclient.settings.minecraft.resolution.description"),
+                resettable_all(
+                    resolution_field(width, height),
+                    vec![
+                        (
+                            width,
+                            defaults
+                                .resolution
+                                .map(|r| r.width.to_string())
+                                .unwrap_or_default(),
+                        ),
+                        (
+                            height,
+                            defaults
+                                .resolution
+                                .map(|r| r.height.to_string())
+                                .unwrap_or_default(),
+                        ),
+                    ],
+                ),
+            ))
+            .child(settings_row(
+                IconType::Database01,
+                t("oneclient.settings.minecraft.memory.title"),
+                t("oneclient.settings.minecraft.memory.description"),
+                resettable(
+                    memory_field(
+                        memory,
+                        t("oneclient.common.default"),
+                        oneclient_common::default_mem_max(),
+                    ),
+                    memory,
+                    String::new(),
+                ),
+            ))
+            .child(settings_row(
+                IconType::Settings04,
+                t("oneclient.settings.minecraft.hardware.title"),
+                t("oneclient.settings.minecraft.hardware.description"),
+                HardwarePreset,
+            ))
+            .child(settings_row(
+                IconType::Database01,
+                t("oneclient.settings.minecraft.world_backups.title"),
+                t("oneclient.settings.minecraft.world_backups.description"),
+                resettable(toggle(backup_worlds), backup_worlds, true),
+            ))
+            .child(settings_row(
+                IconType::Terminal,
+                t("oneclient.settings.minecraft.jvm_args.title"),
+                t("oneclient.settings.minecraft.jvm_args.description"),
+                resettable(
+                    TextInput::new(jvm_args)
+                        .placeholder("-XX:+UseG1GC")
+                        .expandable(true)
+                        .width(Size::px(220.)),
+                    jvm_args,
+                    defaults.launch_args.clone().unwrap_or_default(),
+                ),
+            ))
+            .child(settings_row(
+                IconType::Play,
+                t("oneclient.settings.minecraft.game_args.title"),
+                t("oneclient.settings.minecraft.game_args.description"),
+                resettable(
+                    TextInput::new(game_args)
+                        .placeholder("--tracy --tracyNoImages")
+                        .expandable(true)
+                        .width(Size::px(220.)),
+                    game_args,
+                    defaults.game_args.clone().unwrap_or_default(),
+                ),
+            ))
+            .child(section_header(t(
+                "oneclient.settings.minecraft.section.content",
+            )))
+            .child(settings_row(
+                IconType::RefreshCw01,
+                t("oneclient.settings.minecraft.browser_updates.title"),
+                t("oneclient.settings.minecraft.browser_updates.description"),
+                resettable(
+                    update_mode_field(update_mode),
+                    update_mode,
+                    defaults.browser_update_mode.unwrap_or_default(),
+                ),
+            ))
+            .child(section_header(t(
+                "oneclient.settings.minecraft.section.process",
+            )))
+            .child(settings_row(
+                IconType::FilePlus02,
+                t("oneclient.settings.minecraft.pre_launch.title"),
+                t("oneclient.settings.minecraft.pre_launch.description"),
+                resettable(
+                    TextInput::new(pre_launch_command)
+                        .placeholder("echo 'Game started'")
+                        .expandable(true)
+                        .width(Size::px(220.)),
+                    pre_launch_command,
+                    defaults.hook_pre.clone().unwrap_or_default(),
+                ),
+            ))
+            .child(settings_row(
+                IconType::ParagraphWrap,
+                t("oneclient.settings.minecraft.wrapper.title"),
+                t("oneclient.settings.minecraft.wrapper.description"),
+                resettable(
+                    TextInput::new(wrapper_command)
+                        .placeholder("gamescope")
+                        .expandable(true)
+                        .width(Size::px(220.)),
+                    wrapper_command,
+                    defaults.hook_wrapper.clone().unwrap_or_default(),
+                ),
+            ))
+            .child(settings_row(
+                IconType::FileX02,
+                t("oneclient.settings.minecraft.post_exit.title"),
+                t("oneclient.settings.minecraft.post_exit.description"),
+                resettable(
+                    TextInput::new(post_exit_command)
+                        .placeholder("echo 'Game exited'")
+                        .expandable(true)
+                        .width(Size::px(220.)),
+                    post_exit_command,
+                    defaults.hook_post.clone().unwrap_or_default(),
+                ),
+            ));
+
+        let page = if gpus.read().is_empty() {
+            page
+        } else {
+            page.child(section_header(t(
+                "oneclient.settings.minecraft.section.graphics",
+            )))
+            .child(settings_row(
+                IconType::Rocket02,
+                t("oneclient.settings.minecraft.gpu.title"),
+                t("oneclient.settings.minecraft.gpu.description"),
+                resettable(gpu_field(gpu, &gpus.read()), gpu, None),
+            ))
+        };
+
+        page.into_element()
+    }
+}
+
+fn with_gpu(mut update: ProfileUpdate, gpu: Option<String>) -> ProfileUpdate {
+    let base = crate::launcher::state()
+        .ok()
+        .and_then(|state| state.settings.read().global_game_settings.os_extra.clone())
+        .unwrap_or_default();
+
+    update.os_extra = Patch::Set(SettingsOsExtra { gpu, ..base });
+    update
+}
+
+fn gpu_field(
+    mut selected: State<Option<String>>,
+    gpus: &[oneclient_core::game::gpu::Gpu],
+) -> impl IntoElement {
+    let system_default = t("oneclient.settings.minecraft.gpu.system_default");
+
+    let current = selected
+        .read()
+        .as_deref()
+        .and_then(|id| gpus.iter().find(|gpu| gpu.id == id))
+        .map_or(system_default.to_string(), |gpu| gpu.name.clone());
+
+    let options = std::iter::once(system_default.to_string())
+        .chain(gpus.iter().map(|gpu| gpu.name.clone()))
+        .collect();
+    let ids: Vec<String> = gpus.iter().map(|gpu| gpu.id.clone()).collect();
+
+    Dropdown::new(current, options)
+        .width(Size::px(220.))
+        .height(Size::px(34.))
+        .on_select(move |idx: usize| {
+            selected.set(idx.checked_sub(1).and_then(|i| ids.get(i).cloned()));
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_update(
+    fullscreen: bool,
+    width: &str,
+    height: &str,
+    memory: &str,
+    jvm_args: &str,
+    game_args: &str,
+    pre: &str,
+    wrapper: &str,
+    post: &str,
+    update_mode: PackageUpdateMode,
+) -> ProfileUpdate {
+    let resolution = match (width.trim(), height.trim()) {
+        ("", "") => Patch::Clear,
+        (w, h) => match (w.parse::<u32>(), h.parse::<u32>()) {
+            (Ok(w), Ok(h)) => Patch::Set(Resolution::new(w, h)),
+            _ => Patch::Unchanged,
+        },
+    };
+
+    let mem_max = match memory.trim() {
+        "" => Patch::Clear,
+        m => m.parse::<u32>().map(Patch::Set).unwrap_or(Patch::Unchanged),
+    };
+
+    ProfileUpdate {
+        force_fullscreen: Patch::Set(fullscreen),
+        resolution,
+        mem_max,
+        launch_args: command_patch(jvm_args),
+        game_args: command_patch(game_args),
+        hook_pre: command_patch(pre),
+        hook_wrapper: command_patch(wrapper),
+        hook_post: command_patch(post),
+        browser_update_mode: Patch::Set(update_mode),
+        ..Default::default()
+    }
+}
+
+fn update_mode_field(mut selected: State<PackageUpdateMode>) -> impl IntoElement {
+    let options: Vec<String> = PackageUpdateMode::ALL
+        .iter()
+        .map(|mode| mode.label().to_string())
+        .collect();
+
+    Dropdown::new(selected.read().label(), options)
+        .width(Size::px(220.))
+        .height(Size::px(34.))
+        .on_select(move |idx: usize| {
+            if let Some(mode) = PackageUpdateMode::ALL.get(idx).copied() {
+                selected.set(mode);
+            }
+        })
+}
+
+fn command_patch(value: &str) -> Patch<String> {
+    match value.trim() {
+        "" => Patch::Clear,
+        v => Patch::Set(v.to_string()),
+    }
+}
+
+fn resolution_field(width: State<String>, height: State<String>) -> impl IntoElement {
+    rect()
+        .horizontal()
+        .cross_align(Alignment::Center)
+        .spacing(8.)
+        .child(
+            TextInput::new(width)
+                .placeholder("854")
+                .on_validate(validate_number)
+                .text_align(TextAlign::Center)
+                .width(Size::px(70.))
+                .text_align(TextAlign::Center),
+        )
+        .child(
+            Icon::new(IconType::X)
+                .size(14.)
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            TextInput::new(height)
+                .placeholder("480")
+                .on_validate(validate_number)
+                .text_align(TextAlign::Center)
+                .width(Size::px(70.))
+                .text_align(TextAlign::Center),
+        )
+        .into_element()
+}
+
+/// Shows what the machine is and what the hardware preset would change.
+#[derive(PartialEq)]
+struct HardwarePreset;
+
+impl Component for HardwarePreset {
+    fn render(&self) -> impl IntoElement {
+        let hardware = crate::hooks::settled_or_loading(&crate::hooks::use_hardware());
+        let dispatch = use_dispatch();
+        let mut busy = use_state(|| false);
+        let cluster_id = *crate::hooks::use_active_cluster_id().read();
+
+        let Some(hardware) = hardware else {
+            return label()
+                .text(t("oneclient.settings.minecraft.hardware.detecting"))
+                .font_size(preset_text_size())
+                .color(colors::fg_secondary())
+                .into_element();
+        };
+
+        let plan = oneclient_core::presets::plan(&hardware, None);
+        let summary = format!(
+            "{} · {} ГБ · {} Гц",
+            if hardware.gpu.is_empty() {
+                "GPU ?".to_string()
+            } else {
+                hardware.gpu.clone()
+            },
+            (hardware.ram_mb + 512) / 1024,
+            hardware.refresh_hz
+        );
+
+        let apply = {
+            let dispatch = dispatch.clone();
+            let plan = plan.clone();
+            let mut busy = busy;
+            move |_: Event<PressEventData>| {
+                if *busy.peek() {
+                    return;
+                }
+                busy.set(true);
+                let dispatch = dispatch.clone();
+                let plan = plan.clone();
+                spawn(async move {
+                    let result = apply_preset(cluster_id, &plan).await;
+                    busy.set(false);
+                    match result {
+                        Ok(dir) => {
+                            dispatch
+                                .notify(t("oneclient.settings.minecraft.hardware.applied"))
+                                .body(format!(
+                                    "{} FPS · {} чанков · {}%\n{}",
+                                    plan.fps_cap,
+                                    plan.render_distance,
+                                    plan.render_scale_percent,
+                                    dir
+                                ))
+                                .send();
+                        }
+                        Err(err) => {
+                            dispatch
+                                .notify(t("oneclient.settings.minecraft.hardware.failed"))
+                                .body(err)
+                                .error()
+                                .send();
+                        }
+                    }
+                });
+            }
+        };
+
+        rect()
+            .vertical()
+            .spacing(6.)
+            .child(
+                label()
+                    .text(summary)
+                    .font_size(preset_text_size())
+                    .color(colors::fg_primary()),
+            )
+            .child(
+                label()
+                    .text(plan.reason)
+                    .font_size(11.)
+                    .max_lines(2)
+                    .color(colors::fg_secondary()),
+            )
+            .child(
+                crate::components::Button::new()
+                    .primary()
+                    .small()
+                    .enabled(!*busy.read())
+                    .on_press(apply)
+                    .child(Icon::new(IconType::Settings04).size(13.))
+                    .text(t("oneclient.settings.minecraft.hardware.apply")),
+            )
+            .into_element()
+    }
+}
+
+fn preset_text_size() -> f32 {
+    crate::theme::text_size(12.)
+}
+
+/// Writes the plan into the selected cluster's `options.txt` and returns the path
+/// it touched, so the notification can show it.
+async fn apply_preset(
+    cluster_id: Option<i64>,
+    plan: &oneclient_core::presets::Plan,
+) -> Result<String, String> {
+    let state = crate::launcher::state().map_err(|err| err.to_string())?;
+    let cluster_id = cluster_id
+        .ok_or_else(|| t("oneclient.settings.minecraft.hardware.no_cluster").to_string())?;
+    if oneclient_core::game::is_running(&state, cluster_id) {
+        return Err(t("oneclient.settings.minecraft.hardware.running").to_string());
+    }
+
+    let cluster = state
+        .clusters
+        .get(cluster_id)
+        .await
+        .map_err(|err| err.to_string())?;
+    let dir = cluster.game_dir().map_err(|err| err.to_string())?;
+    let path = dir.join("options.txt");
+
+    oneclient_core::presets::write_options(&path, plan).map_err(|err| err.to_string())?;
+    Ok(path.display().to_string())
+}

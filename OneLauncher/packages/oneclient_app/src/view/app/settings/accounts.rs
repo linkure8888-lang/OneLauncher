@@ -1,0 +1,1019 @@
+use std::path::PathBuf;
+
+use chrono::{DateTime, Utc};
+use freya::animation::{AnimNum, Function, OnFinish, use_animation};
+use freya::prelude::*;
+use freya::query::{MutationCapability, MutationStateData, UseMutation};
+use oneclient_auth::{AccountKind, MinecraftAccount};
+use oneclient_core::{SkinModel, remove_offline_cape, save_offline_skin};
+use uuid::Uuid;
+
+use super::{section_header, settings_page};
+use crate::components::{
+    Avatar, Button, Dropdown, Icon, IconType, MicrosoftLogin, OverlayPopup, PlayerModel, TextInput,
+    use_microsoft_login,
+};
+use crate::hooks::{
+    AddOfflineAccountKeys, RefreshAccountKeys, RemoveAccountKeys, SetDefaultAccountKeys,
+    try_accounts, try_default_account, use_accounts, use_add_offline_account, use_current_account,
+    use_dispatch, use_refresh_account, use_remove_account, use_set_default_account,
+};
+use crate::i18n::t;
+use crate::theme::{colors, rounded, text_size};
+use crate::ui::border_all_color;
+
+/// The shader scales the model off `res.y` alone so height makes the player bigger width only needs to clear the arms
+const MODEL_WIDTH_PX: f32 = 160.;
+const MODEL_HEIGHT_PX: f32 = 264.;
+
+const AVATAR_SIZE_PX: f32 = 36.;
+
+#[derive(PartialEq)]
+pub struct SettingsAccounts;
+
+impl Component for SettingsAccounts {
+    fn render(&self) -> impl IntoElement {
+        let accounts_query = use_accounts();
+        let default_query = use_current_account();
+
+        let msa = use_microsoft_login();
+        let add_offline = use_add_offline_account();
+        let set_default = use_set_default_account();
+        let remove = use_remove_account();
+        let refresh = use_refresh_account();
+
+        let mut username = use_state(String::new);
+        let mut show_offline = use_state(|| false);
+        let mut closing_offline = use_state(|| false);
+
+        use_side_effect(move || {
+            if !*closing_offline.read() {
+                return;
+            }
+            match &*add_offline.read().state() {
+                MutationStateData::Settled { res: Ok(_), .. } => {
+                    closing_offline.set(false);
+                    show_offline.set(false);
+                    username.set(String::new());
+                }
+                MutationStateData::Settled { res: Err(_), .. } => {
+                    closing_offline.set(false);
+                }
+                _ => {}
+            }
+        });
+
+        let accounts = try_accounts(&accounts_query).unwrap_or_default();
+        let default_account = try_default_account(&default_query);
+        let default_id = default_account.as_ref().map(|a| a.id);
+
+        let offline_name = username.read().trim().to_string();
+        let offline_uuid = (!offline_name.is_empty())
+            .then(|| oneclient_auth::offline_uuid(&offline_name).to_string());
+
+        let offline_error = mutation_err_text(&add_offline);
+
+        let on_confirm_offline = move |_| {
+            let name = username.peek().trim().to_string();
+            if name.is_empty() {
+                return;
+            }
+            add_offline.mutate(AddOfflineAccountKeys { username: name });
+            closing_offline.set(true);
+        };
+
+        let mut rows: Vec<Element> = accounts
+            .iter()
+            .map(|account| {
+                AccountRow {
+                    id: account.id,
+                    username: account.username.clone(),
+                    kind: account.kind,
+                    expires: account.expires,
+                    signed_out: account.needs_sign_in(),
+                    is_default: Some(account.id) == default_id,
+                    set_default,
+                    remove,
+                    refresh,
+                    sign_in: msa.clone(),
+                }
+                .into_element()
+            })
+            .collect();
+        if rows.is_empty() {
+            rows.push(empty_state());
+        }
+
+        settings_page()
+            .child(hero(
+                default_account,
+                msa.pending,
+                msa.error.clone(),
+                move |_| show_offline.set(true),
+                {
+                    let msa = msa.clone();
+                    move |_| msa.start()
+                },
+            ))
+            .child(section_header(t(
+                "oneclient.settings.accounts.section.your_accounts",
+            )))
+            .children(rows)
+            .maybe_child(show_offline.read().then(|| {
+                offline_dialog(
+                    username,
+                    offline_uuid,
+                    offline_error,
+                    on_confirm_offline,
+                    show_offline,
+                )
+            }))
+            .maybe_child(msa.popup())
+            .into_element()
+    }
+}
+
+fn hero(
+    account: Option<MinecraftAccount>,
+    microsoft_pending: bool,
+    error: Option<String>,
+    on_open_offline: impl FnMut(Event<PressEventData>) + 'static,
+    on_add_microsoft: impl FnMut(Event<PressEventData>) + 'static,
+) -> impl IntoElement {
+    let (name, subtitle) = match &account {
+        Some(account) if account.needs_sign_in() => (
+            account.username.clone(),
+            t("oneclient.settings.accounts.hero.signed_out"),
+        ),
+        Some(account) => (account.username.clone(), kind_label(account.kind)),
+        None => (
+            t("oneclient.settings.accounts.hero.no_account").to_string(),
+            t("oneclient.settings.accounts.hero.no_account_hint"),
+        ),
+    };
+
+    rect()
+        .horizontal()
+        .width(Size::fill())
+        .content(Content::Flex)
+        .cross_align(Alignment::Center)
+        .spacing(16.)
+        .padding(Gaps::new_all(16.))
+        .corner_radius(rounded(12.))
+        .background(colors::page_elevated())
+        .child(model_frame(account.as_ref().map(|account| account.id)))
+        .child(
+            rect()
+                .vertical()
+                .width(Size::flex(1.0))
+                .spacing(16.)
+                .child(
+                    rect()
+                        .vertical()
+                        .width(Size::fill())
+                        .spacing(2.)
+                        .child(
+                            label()
+                                .text(t("oneclient.settings.accounts.hero.active_account"))
+                                .font_size(text_size(11.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .color(colors::fg_secondary()),
+                        )
+                        .child(
+                            label()
+                                .text(name)
+                                .font_size(text_size(24.))
+                                .font_weight(FontWeight::SEMI_BOLD)
+                                .max_lines(1)
+                                .color(colors::fg_primary()),
+                        )
+                        .child(
+                            label()
+                                .text(subtitle)
+                                .font_size(text_size(12.))
+                                .color(colors::fg_secondary()),
+                        ),
+                )
+                .child(
+                    rect()
+                        .vertical()
+                        .width(Size::fill())
+                        .spacing(8.)
+                        .child(
+                            // The two buttons overflow the ~245px beside the model at the 800px minimum so they wrap
+                            rect()
+                                .horizontal()
+                                .width(Size::fill())
+                                .content(Content::wrap_spacing(8.))
+                                .spacing(8.)
+                                .child(
+                                    Button::new()
+                                        .primary()
+                                        .enabled(!microsoft_pending)
+                                        .on_press(on_add_microsoft)
+                                        .child(Icon::new(IconType::Globe01).size(16.))
+                                        .text(if microsoft_pending {
+                                            t("oneclient.settings.accounts.signing_in")
+                                        } else {
+                                            t("oneclient.settings.accounts.add_microsoft")
+                                        }),
+                                )
+                                .child(
+                                    Button::new()
+                                        .secondary()
+                                        .on_press(on_open_offline)
+                                        .child(Icon::new(IconType::Plus).size(16.))
+                                        .text(t("oneclient.settings.accounts.add_offline")),
+                                ),
+                        )
+                        .map(error, |el, msg| {
+                            el.child(hint_line(IconType::AlertTriangle, msg, colors::danger()))
+                        }),
+                ),
+        )
+        .into_element()
+}
+
+fn model_frame(id: Option<Uuid>) -> impl IntoElement {
+    rect()
+        .vertical()
+        .cross_align(Alignment::Center)
+        .spacing(6.)
+        .child(
+            rect()
+                .width(Size::px(MODEL_WIDTH_PX))
+                .height(Size::px(MODEL_HEIGHT_PX))
+                .center()
+                .overflow(Overflow::Clip)
+                .corner_radius(rounded(12.))
+                .background(colors::component_bg())
+                .border(border_all_color(1., colors::component_border()))
+                .child(match id {
+                    Some(id) => PlayerModel::new(id)
+                        .yaw(-0.5)
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .into_element(),
+                    None => Icon::new(IconType::Users01)
+                        .size(28.)
+                        .color(colors::fg_secondary())
+                        .into_element(),
+                }),
+        )
+        .maybe_child(id.map(|_| {
+            label()
+                .text(t("oneclient.settings.accounts.drag_to_rotate"))
+                .font_size(text_size(10.))
+                .color(colors::fg_secondary())
+                .into_element()
+        }))
+        .into_element()
+}
+
+fn mutation_err_text<M>(mutation: &UseMutation<M>) -> Option<String>
+where
+    M: MutationCapability,
+    M::Err: std::fmt::Display,
+{
+    match &*mutation.read().state() {
+        MutationStateData::Settled { res: Err(err), .. } => Some(err.to_string()),
+        MutationStateData::Loading {
+            res: Some(Err(err)),
+        } => Some(err.to_string()),
+        _ => None,
+    }
+}
+
+fn offline_dialog(
+    username: State<String>,
+    uuid_preview: Option<String>,
+    error: Option<String>,
+    on_confirm: impl FnMut(Event<PressEventData>) + 'static,
+    mut show_offline: State<bool>,
+) -> impl IntoElement {
+    OverlayPopup::new()
+        .on_close(move |()| show_offline.set(false))
+        .child(
+            rect()
+                .width(Size::window_percent(100.))
+                .height(Size::window_percent(100.))
+                .center()
+                .child(
+                    rect()
+                        .vertical()
+                        .width(Size::px(380.))
+                        .max_width(Size::window_percent(90.))
+                        .spacing(16.)
+                        .padding(Gaps::new_all(20.))
+                        .corner_radius(rounded(16.))
+                        .background(colors::page_elevated())
+                        .border(border_all_color(1., colors::component_border()))
+                        .child(
+                            label()
+                                .text(t("oneclient.settings.accounts.offline.title"))
+                                .font_size(text_size(18.))
+                                .font_weight(FontWeight::SEMI_BOLD)
+                                .color(colors::fg_primary()),
+                        )
+                        .child(
+                            rect()
+                                .vertical()
+                                .width(Size::fill())
+                                .spacing(6.)
+                                .child(field_label(t(
+                                    "oneclient.settings.accounts.offline.username",
+                                )))
+                                .child(TextInput::new(username).placeholder(t(
+                                    "oneclient.settings.accounts.offline.username_placeholder",
+                                ))),
+                        )
+                        .child(
+                            rect()
+                                .vertical()
+                                .width(Size::fill())
+                                .spacing(6.)
+                                .child(field_label("UUID"))
+                                .child(
+                                    label()
+                                        .text(uuid_preview.unwrap_or_else(|| "-".to_string()))
+                                        .font_size(text_size(12.))
+                                        .color(colors::fg_secondary()),
+                                ),
+                        )
+                        .map(error, |el, msg| {
+                            el.child(hint_line(IconType::AlertTriangle, msg, colors::danger()))
+                        })
+                        .child(
+                            rect()
+                                .horizontal()
+                                .width(Size::fill())
+                                .main_align(Alignment::End)
+                                .spacing(8.)
+                                .child(
+                                    Button::new()
+                                        .ghost()
+                                        .on_press(move |_| show_offline.set(false))
+                                        .text(t("oneclient.common.cancel")),
+                                )
+                                .child(
+                                    Button::new()
+                                        .primary()
+                                        .on_press(on_confirm)
+                                        .child(Icon::new(IconType::Plus).size(16.))
+                                        .text(t("oneclient.settings.accounts.offline.confirm")),
+                                ),
+                        ),
+                ),
+        )
+        .into_element()
+}
+
+fn field_label(text: &str) -> impl IntoElement {
+    label()
+        .text(text.to_string())
+        .font_size(text_size(11.))
+        .font_weight(FontWeight::MEDIUM)
+        .color(colors::fg_secondary())
+        .into_element()
+}
+
+/// Sits in whatever is left of the hero beside the model so the text must wrap
+fn hint_line(icon: IconType, text: String, color: Color) -> impl IntoElement {
+    rect()
+        .horizontal()
+        .width(Size::fill())
+        .content(Content::Flex)
+        .cross_align(Alignment::Center)
+        .spacing(6.)
+        .child(Icon::new(icon).size(13.).color(color))
+        .child(
+            label()
+                .text(text)
+                .font_size(text_size(12.))
+                .width(Size::flex(1.0))
+                .color(color),
+        )
+        .into_element()
+}
+
+const REFRESH_SPIN_TIME: u64 = 800;
+
+const REFRESHING_OPACITY: f32 = 0.7;
+
+/// Only the identity half fades the sign-in and remove buttons stay crisp
+const SIGNED_OUT_OPACITY: f32 = 0.45;
+
+struct AccountRow {
+    id: Uuid,
+    username: String,
+    kind: AccountKind,
+    expires: DateTime<Utc>,
+    signed_out: bool,
+    is_default: bool,
+    set_default: crate::hooks::UseSetDefaultAccount,
+    remove: crate::hooks::UseRemoveAccount,
+    refresh: crate::hooks::UseRefreshAccount,
+    sign_in: MicrosoftLogin,
+}
+
+impl PartialEq for AccountRow {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.username == other.username
+            && self.kind == other.kind
+            && self.expires == other.expires
+            && self.signed_out == other.signed_out
+            && self.is_default == other.is_default
+            && self.sign_in.pending == other.sign_in.pending
+    }
+}
+
+impl Component for AccountRow {
+    fn render_key(&self) -> DiffKey {
+        DiffKey::from(&self.id)
+    }
+
+    fn render(&self) -> impl IntoElement {
+        let id = self.id;
+        let is_default = self.is_default;
+        let set_default = self.set_default;
+        let remove = self.remove;
+        let refresh = self.refresh;
+
+        let is_microsoft = self.kind == AccountKind::Microsoft;
+        let mut skin_open = use_state(|| false);
+        let signed_out = is_microsoft && self.signed_out;
+        // A signed-out entry has no token left to call expired
+        let expired = is_microsoft && !signed_out && self.expires <= Utc::now();
+        let identity_opacity = if signed_out { SIGNED_OUT_OPACITY } else { 1. };
+        let sign_in = self.sign_in.clone();
+
+        let mut refreshing = use_state(|| false);
+        let is_refreshing = *refreshing.read();
+
+        let spin = use_animation(|conf| {
+            conf.on_finish(OnFinish::restart());
+            AnimNum::new(0., 360.)
+                .time(REFRESH_SPIN_TIME)
+                .function(Function::Linear)
+        });
+
+        use_side_effect_with_deps(&is_refreshing, move |&is_refreshing| {
+            let mut spin = spin;
+            if is_refreshing {
+                spin.start();
+            } else {
+                spin.reset();
+            }
+        });
+
+        let rotation = if is_refreshing {
+            spin.get().value()
+        } else {
+            0.
+        };
+
+        let border_color = if signed_out {
+            colors::component_border()
+        } else if expired {
+            colors::danger()
+        } else if is_default {
+            colors::brand()
+        } else {
+            colors::component_border()
+        };
+
+        rect()
+            .horizontal()
+            .width(Size::fill())
+            .cross_align(Alignment::Center)
+            .content(Content::Flex)
+            .spacing(12.)
+            .padding(Gaps::new_all(12.))
+            .corner_radius(rounded(12.))
+            .background(colors::page_elevated())
+            .border(border_all_color(1., border_color))
+            .opacity(if is_refreshing {
+                REFRESHING_OPACITY
+            } else {
+                1.
+            })
+            .a11y_role(AccessibilityRole::Button)
+            .maybe(!is_default && !signed_out, |el| {
+                el.on_press(move |_| set_default.mutate(SetDefaultAccountKeys { id: Some(id) }))
+            })
+            .child(
+                rect().opacity(identity_opacity).child(
+                    Avatar::new(id.to_string())
+                        .width(Size::px(AVATAR_SIZE_PX))
+                        .height(Size::px(AVATAR_SIZE_PX)),
+                ),
+            )
+            .child(
+                rect()
+                    .vertical()
+                    .width(Size::flex(1.0))
+                    .spacing(4.)
+                    .opacity(identity_opacity)
+                    .child(
+                        rect()
+                            .horizontal()
+                            .cross_align(Alignment::Center)
+                            .spacing(6.)
+                            .child(
+                                label()
+                                    .text(self.username.clone())
+                                    .font_size(text_size(15.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .max_lines(1)
+                                    .color(colors::fg_primary()),
+                            )
+                            .maybe_child(is_default.then(default_badge))
+                            .maybe_child(expired.then(expired_badge))
+                            .maybe_child(signed_out.then(signed_out_badge)),
+                    )
+                    // The kind rides with the id a third badge and a full uuid do not both fit
+                    .child(
+                        label()
+                            .text(if signed_out {
+                                t("oneclient.settings.accounts.session_expired").to_string()
+                            } else {
+                                format!("{} · {id}", kind_label(self.kind))
+                            })
+                            .font_size(text_size(11.))
+                            .max_lines(1)
+                            .color(colors::fg_secondary()),
+                    ),
+            )
+            .maybe_child(signed_out.then(|| {
+                let pending = sign_in.pending;
+                Button::new()
+                    .secondary()
+                    .enabled(!pending)
+                    .tooltip(t("oneclient.settings.accounts.sign_in_again"))
+                    .on_press(move |e: Event<PressEventData>| {
+                        e.stop_propagation();
+                        sign_in.start();
+                    })
+                    .child(Icon::new(IconType::Globe01).size(16.))
+                    .text(if pending {
+                        t("oneclient.settings.accounts.signing_in")
+                    } else {
+                        t("oneclient.settings.accounts.sign_in")
+                    })
+                    .into_element()
+            }))
+            .maybe_child((is_microsoft && !signed_out).then(|| {
+                Button::new()
+                    .ghost()
+                    .icon()
+                    .tooltip(t("oneclient.settings.accounts.refresh"))
+                    .on_press(move |e: Event<PressEventData>| {
+                        e.stop_propagation();
+                        if *refreshing.peek() {
+                            return;
+                        }
+                        refreshing.set(true);
+                        spawn(async move {
+                            refresh.mutate_async(RefreshAccountKeys { id }).await;
+                            refreshing.set(false);
+                        });
+                    })
+                    .child(
+                        rect().rotate(rotation).child(
+                            Icon::new(IconType::RefreshCw01)
+                                .size(18.)
+                                .color(if expired {
+                                    colors::danger()
+                                } else {
+                                    colors::fg_secondary()
+                                }),
+                        ),
+                    )
+                    .into_element()
+            }))
+            .maybe_child((!is_microsoft).then(|| {
+                let mut skin_open = skin_open;
+                Button::new()
+                    .ghost()
+                    .icon()
+                    .tooltip(t("oneclient.settings.accounts.skin.title"))
+                    .on_press(move |e: Event<PressEventData>| {
+                        e.stop_propagation();
+                        skin_open.set(true);
+                    })
+                    .child(
+                        Icon::new(IconType::Brush01)
+                            .size(18.)
+                            .color(colors::fg_secondary()),
+                    )
+                    .into_element()
+            }))
+            .child(
+                Button::new()
+                    .ghost()
+                    .icon()
+                    .enabled(false)
+                    .tooltip(t("oneclient.common.edit"))
+                    .child(
+                        Icon::new(IconType::Pencil01)
+                            .size(18.)
+                            .color(colors::fg_secondary()),
+                    ),
+            )
+            .child(
+                Button::new()
+                    .ghost()
+                    .icon()
+                    .tooltip(t("oneclient.settings.accounts.remove"))
+                    .on_press(move |e: Event<PressEventData>| {
+                        e.stop_propagation();
+                        remove.mutate(RemoveAccountKeys { id });
+                    })
+                    .child(
+                        Icon::new(IconType::Trash01)
+                            .size(18.)
+                            .color(colors::fg_secondary()),
+                    ),
+            )
+            .maybe_child(skin_open.read().then(|| {
+                OfflineSkinDialog {
+                    account_id: id,
+                    on_close: (move |_: ()| skin_open.set(false)).into(),
+                }
+                .into_element()
+            }))
+            .into_element()
+    }
+}
+
+pub struct OfflineSkinDialog {
+    pub account_id: Uuid,
+    pub on_close: EventHandler<()>,
+}
+
+impl PartialEq for OfflineSkinDialog {
+    fn eq(&self, other: &Self) -> bool {
+        self.account_id == other.account_id
+    }
+}
+
+impl Component for OfflineSkinDialog {
+    fn render(&self) -> impl IntoElement {
+        let skin_path = use_state(|| None::<PathBuf>);
+        let cape_path = use_state(|| None::<PathBuf>);
+        let mut model = use_state(|| SkinModel::Classic);
+        let busy = use_state(|| false);
+        let error = use_state(|| None::<String>);
+        let dispatch = use_dispatch();
+        let account_id = self.account_id;
+        let close = self.on_close.clone();
+        let close_for_overlay = close.clone();
+
+        let skin_name = skin_path
+            .read()
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| t("oneclient.settings.accounts.skin.not_chosen").to_string());
+        let cape_name = cape_path
+            .read()
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| t("oneclient.settings.accounts.skin.not_chosen").to_string());
+
+        let choose_skin = {
+            let mut skin_path = skin_path;
+            move |_: Event<PressEventData>| {
+                spawn(async move {
+                    if let Some(file) = rfd::AsyncFileDialog::new()
+                        .add_filter("PNG", &["png"])
+                        .set_title(t("oneclient.settings.accounts.skin.skin_file"))
+                        .pick_file()
+                        .await
+                    {
+                        skin_path.set(Some(file.path().to_path_buf()));
+                    }
+                });
+            }
+        };
+        let choose_cape = {
+            let mut cape_path = cape_path;
+            move |_: Event<PressEventData>| {
+                spawn(async move {
+                    if let Some(file) = rfd::AsyncFileDialog::new()
+                        .add_filter("PNG", &["png"])
+                        .set_title(t("oneclient.settings.accounts.skin.cape_file"))
+                        .pick_file()
+                        .await
+                    {
+                        cape_path.set(Some(file.path().to_path_buf()));
+                    }
+                });
+            }
+        };
+        let remove_cape = {
+            let dispatch = dispatch.clone();
+            let mut cape_path = cape_path;
+            let mut error = error;
+            move |_: Event<PressEventData>| {
+                let dispatch = dispatch.clone();
+                spawn(async move {
+                    match remove_offline_cape(account_id).await {
+                        Ok(()) => {
+                            cape_path.set(None);
+                            dispatch
+                                .notify(t("oneclient.settings.accounts.skin.saved"))
+                                .send();
+                        }
+                        Err(err) => error.set(Some(err)),
+                    }
+                });
+            }
+        };
+        let apply = {
+            let dispatch = dispatch.clone();
+            let skin_path = skin_path;
+            let cape_path = cape_path;
+            let model = model;
+            let mut busy = busy;
+            let mut error = error;
+            let close_apply = close.clone();
+            move |_: Event<PressEventData>| {
+                if *busy.peek() {
+                    return;
+                }
+                let skin = skin_path.read().clone();
+                let cape = cape_path.read().clone();
+                let selected = *model.read();
+                busy.set(true);
+                error.set(None);
+                let dispatch = dispatch.clone();
+                let close_apply = close_apply.clone();
+                spawn(async move {
+                    match save_offline_skin(account_id, skin, cape, selected).await {
+                        Ok(_) => {
+                            busy.set(false);
+                            dispatch
+                                .notify(t("oneclient.settings.accounts.skin.saved"))
+                                .send();
+                            close_apply.call(());
+                        }
+                        Err(err) => {
+                            busy.set(false);
+                            error.set(Some(err));
+                        }
+                    }
+                });
+            }
+        };
+
+        OverlayPopup::new()
+            .on_close(move |()| close_for_overlay.call(()))
+            .child(
+                rect()
+                    .width(Size::window_percent(100.))
+                    .height(Size::window_percent(100.))
+                    .center()
+                    .child(
+                        rect()
+                            .vertical()
+                            .width(Size::px(460.))
+                            .max_width(Size::window_percent(90.))
+                            .spacing(14.)
+                            .padding(Gaps::new_all(20.))
+                            .corner_radius(rounded(16.))
+                            .background(colors::page_elevated())
+                            .border(border_all_color(1., colors::component_border()))
+                            .child(
+                                label()
+                                    .text(t("oneclient.settings.accounts.skin.title"))
+                                    .font_size(text_size(18.))
+                                    .font_weight(FontWeight::SEMI_BOLD)
+                                    .color(colors::fg_primary()),
+                            )
+                            .child(
+                                label()
+                                    .text(t("oneclient.settings.accounts.skin.body"))
+                                    .font_size(text_size(12.))
+                                    .color(colors::fg_secondary()),
+                            )
+                            .child(file_row(
+                                t("oneclient.settings.accounts.skin.skin_file"),
+                                skin_name,
+                                choose_skin,
+                            ))
+                            .child(file_row(
+                                t("oneclient.settings.accounts.skin.cape_file"),
+                                cape_name,
+                                choose_cape,
+                            ))
+                            .child(
+                                rect()
+                                    .horizontal()
+                                    .width(Size::fill())
+                                    .cross_align(Alignment::Center)
+                                    .spacing(10.)
+                                    .child(
+                                        label()
+                                            .text(t("oneclient.settings.accounts.skin.model"))
+                                            .font_size(text_size(12.))
+                                            .color(colors::fg_secondary()),
+                                    )
+                                    .child(
+                                        Dropdown::new(
+                                            match *model.read() {
+                                                SkinModel::Classic => {
+                                                    t("oneclient.settings.accounts.skin.classic")
+                                                        .to_string()
+                                                }
+                                                SkinModel::Slim => {
+                                                    t("oneclient.settings.accounts.skin.slim")
+                                                        .to_string()
+                                                }
+                                            },
+                                            vec![
+                                                t("oneclient.settings.accounts.skin.classic")
+                                                    .to_string(),
+                                                t("oneclient.settings.accounts.skin.slim")
+                                                    .to_string(),
+                                            ],
+                                        )
+                                        .width(Size::px(130.))
+                                        .height(Size::px(28.))
+                                        .on_select(
+                                            move |index| {
+                                                model.set(if index == 0 {
+                                                    SkinModel::Classic
+                                                } else {
+                                                    SkinModel::Slim
+                                                });
+                                            },
+                                        ),
+                                    ),
+                            )
+                            .maybe_child(error.read().clone().map(|message| {
+                                hint_line(IconType::AlertTriangle, message, colors::danger())
+                            }))
+                            .child(
+                                rect()
+                                    .horizontal()
+                                    .width(Size::fill())
+                                    .main_align(Alignment::End)
+                                    .spacing(8.)
+                                    .child(
+                                        Button::new().ghost().on_press(remove_cape).text(t(
+                                            "oneclient.settings.accounts.skin.remove_cape",
+                                        )),
+                                    )
+                                    .child(
+                                        Button::new()
+                                            .ghost()
+                                            .on_press(move |_| close.call(()))
+                                            .text(t("oneclient.common.cancel")),
+                                    )
+                                    .child(
+                                        Button::new()
+                                            .primary()
+                                            .enabled(!*busy.read())
+                                            .on_press(apply)
+                                            .text(t("oneclient.common.save")),
+                                    ),
+                            ),
+                    ),
+            )
+            .into_element()
+    }
+}
+
+fn file_row(
+    label_text: &'static str,
+    file_name: String,
+    on_choose: impl FnMut(Event<PressEventData>) + 'static,
+) -> impl IntoElement {
+    rect()
+        .vertical()
+        .width(Size::fill())
+        .spacing(6.)
+        .child(
+            label()
+                .text(label_text)
+                .font_size(text_size(11.))
+                .font_weight(FontWeight::MEDIUM)
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            rect()
+                .horizontal()
+                .width(Size::fill())
+                .cross_align(Alignment::Center)
+                .spacing(8.)
+                .child(
+                    label()
+                        .text(file_name)
+                        .font_size(text_size(12.))
+                        .width(Size::flex(1.0))
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .color(colors::fg_primary()),
+                )
+                .child(
+                    Button::new()
+                        .secondary()
+                        .small()
+                        // Without a width the button shrinks to one letter per line
+                        // next to the flexed file name.
+                        .width(Size::px(112.))
+                        .on_press(on_choose)
+                        .text(t("oneclient.settings.accounts.skin.choose")),
+                ),
+        )
+        .into_element()
+}
+
+fn kind_label(kind: AccountKind) -> &'static str {
+    match kind {
+        AccountKind::Microsoft => "Microsoft",
+        AccountKind::Offline => t("oneclient.settings.accounts.kind.offline"),
+    }
+}
+
+fn default_badge() -> impl IntoElement {
+    badge(
+        Icon::new(IconType::CheckCircle)
+            .size(12.)
+            .color(colors::brand())
+            .into_element(),
+        t("oneclient.common.default").to_string(),
+        colors::brand(),
+        colors::brand(),
+    )
+}
+
+fn expired_badge() -> impl IntoElement {
+    badge(
+        Icon::new(IconType::AlertTriangle)
+            .size(12.)
+            .color(colors::danger())
+            .into_element(),
+        t("oneclient.settings.accounts.badge.expired").to_string(),
+        colors::danger(),
+        colors::danger(),
+    )
+}
+
+fn signed_out_badge() -> impl IntoElement {
+    badge(
+        Icon::new(IconType::AlertTriangle)
+            .size(12.)
+            .color(colors::fg_secondary())
+            .into_element(),
+        t("oneclient.settings.accounts.badge.signed_out").to_string(),
+        colors::component_border(),
+        colors::fg_secondary(),
+    )
+}
+
+fn badge(icon: impl IntoElement, text: String, border: Color, fg: Color) -> impl IntoElement {
+    rect()
+        .horizontal()
+        .cross_align(Alignment::Center)
+        .spacing(4.)
+        .padding(Gaps::new_symmetric(2., 8.))
+        .corner_radius(rounded(999.))
+        .border(border_all_color(1., border))
+        .background(colors::component_bg())
+        .child(icon)
+        .child(
+            label()
+                .text(text)
+                .font_size(text_size(10.))
+                .font_weight(FontWeight::MEDIUM)
+                .color(fg),
+        )
+        .into_element()
+}
+
+fn empty_state() -> Element {
+    rect()
+        .vertical()
+        .width(Size::fill())
+        .center()
+        .padding(Gaps::new_all(32.))
+        .spacing(8.)
+        .corner_radius(rounded(12.))
+        .background(colors::page_elevated())
+        .child(
+            Icon::new(IconType::Users01)
+                .size(32.)
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            label()
+                .text(t("oneclient.settings.accounts.empty"))
+                .font_size(text_size(14.))
+                .color(colors::fg_secondary()),
+        )
+        .into_element()
+}

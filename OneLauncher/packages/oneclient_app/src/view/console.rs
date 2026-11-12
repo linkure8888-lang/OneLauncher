@@ -1,0 +1,318 @@
+//! Its own Freya window sharing no radio station or query storage with the main one all it needs is the process-wide channel in [`oneclient_core::logger::console`]
+
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
+use freya::prelude::*;
+use oneclient_core::logger;
+use oneclient_core::logger::console::{self, ConsoleLine};
+use tokio::sync::broadcast::error::RecvError;
+use tracing::Level;
+
+use crate::components::{Button, Icon, IconType, LogViewer, Segment, SegmentedControl, TextInput};
+use crate::i18n::{t, tf};
+use crate::theme::{colors, text_size};
+use crate::view::single_window::{Claim, SingleWindow};
+
+/// Old lines are dropped from the front this window can be left open for a whole session
+const MAX_LINES: usize = 5_000;
+
+static CONSOLE_WINDOW: SingleWindow = SingleWindow::new();
+
+static PREVIOUS_DIRECTIVES: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn open_log_console() {
+    let opening = match CONSOLE_WINDOW.claim() {
+        Claim::Focus(id) => {
+            Platform::get().focus_window(id);
+            return;
+        }
+        Claim::Busy => return,
+        Claim::Launch(guard) => guard,
+    };
+
+    raise_to_debug();
+
+    let platform = Platform::get();
+    spawn_in_window(async move {
+        let _opening = opening;
+        platform.launch_window(window_config()).await;
+    });
+}
+
+fn window_config() -> WindowConfig {
+    WindowConfig::new_app(LogConsoleApp)
+        .with_title(t("oneclient.console.window_title"))
+        .with_app_id(crate::constants::WINDOW_APP_ID)
+        .with_icon(LaunchConfig::window_icon(include_bytes!(
+            "../../icons/128x128.png"
+        )))
+        .with_size(1000., 640.)
+        .with_min_size(520., 320.)
+        .with_background(colors::page())
+        // Native decorations a developer tool is not worth a second bespoke titlebar
+        .with_decorations(true)
+        .with_window_handle(|window| CONSOLE_WINDOW.opened(window.id()))
+        .with_on_close(|_, _| {
+            CONSOLE_WINDOW.forget();
+            restore_directives();
+            CloseDecision::Close
+        })
+}
+fn raise_to_debug() {
+    let previous = logger::active_directives();
+    if previous != logger::default_directives() {
+        return;
+    }
+
+    if logger::set_filter(&logger::debug_directives()).is_ok() {
+        *PREVIOUS_DIRECTIVES.lock().expect("console directives") = Some(previous);
+    }
+}
+
+fn restore_directives() {
+    let Some(previous) = PREVIOUS_DIRECTIVES
+        .lock()
+        .expect("console directives")
+        .take()
+    else {
+        return;
+    };
+
+    if logger::active_directives() != logger::debug_directives() {
+        return;
+    }
+
+    let _ = logger::set_filter(&previous);
+}
+
+struct LogConsoleApp;
+
+impl App for LogConsoleApp {
+    fn render(&self) -> impl IntoElement {
+        LogConsole
+    }
+}
+
+/// A floor rather than an exact match unlike the cluster logs page
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Severity {
+    All,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl Severity {
+    fn floor(self) -> Option<Level> {
+        match self {
+            Self::All => None,
+            Self::Debug => Some(Level::DEBUG),
+            Self::Info => Some(Level::INFO),
+            Self::Warn => Some(Level::WARN),
+            Self::Error => Some(Level::ERROR),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => t("oneclient.console.severity.all"),
+            Self::Debug => t("oneclient.console.severity.debug"),
+            Self::Info => t("oneclient.console.severity.info"),
+            Self::Warn => t("oneclient.console.severity.warn"),
+            Self::Error => t("oneclient.console.severity.error"),
+        }
+    }
+}
+
+#[derive(PartialEq)]
+struct LogConsole;
+
+impl Component for LogConsole {
+    fn render(&self) -> impl IntoElement {
+        let mut entries = use_state(VecDeque::<ConsoleLine>::new);
+        let severity = use_state(|| Severity::All);
+        let search = use_state(String::new);
+        let directives = use_state(logger::active_directives);
+        let directives_error = use_state(|| None::<String>);
+
+        use_hook(move || {
+            spawn(async move {
+                // The subscription lives only in this task so closing the window drops the receiver and switches capture off
+                let mut subscription = console::subscribe();
+                tracing::info!("live log console attached");
+
+                loop {
+                    match subscription.recv().await {
+                        Ok(line) => push(&mut entries, line),
+                        Err(RecvError::Lagged(skipped)) => push(
+                            &mut entries,
+                            ConsoleLine {
+                                level: Level::WARN,
+                                text: format!(
+                                    "[console] dropped {skipped} lines, the console fell behind"
+                                )
+                                .into(),
+                            },
+                        ),
+                        Err(RecvError::Closed) => break,
+                    }
+                }
+            })
+        });
+
+        let floor = severity.read().floor();
+        let query = search.read().to_lowercase();
+        let lines: Arc<Vec<Arc<str>>> = Arc::new(
+            entries
+                .read()
+                .iter()
+                .filter(|line| floor.is_none_or(|floor| line.level <= floor))
+                .filter(|line| query.is_empty() || line.text.to_lowercase().contains(&query))
+                .map(|line| line.text.clone())
+                .collect(),
+        );
+
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .padding(Gaps::new_all(12.))
+            .background(colors::page())
+            .child(
+                LogViewer::new(t("oneclient.console.launcher_logs"), lines.clone())
+                    .streaming(true)
+                    .header(
+                        rect()
+                            .vertical()
+                            .width(Size::fill())
+                            .child(view_row(search, severity, lines.len(), entries))
+                            .child(crate::ui::divider())
+                            .child(filter_row(directives, directives_error))
+                            .child(crate::ui::divider()),
+                    ),
+            )
+    }
+}
+
+fn push(entries: &mut State<VecDeque<ConsoleLine>>, line: ConsoleLine) {
+    let mut entries = entries.write();
+    while entries.len() >= MAX_LINES {
+        entries.pop_front();
+    }
+    entries.push_back(line);
+}
+
+/// Purely local nothing here changes what the launcher records
+fn view_row(
+    search: State<String>,
+    severity: State<Severity>,
+    shown: usize,
+    mut entries: State<VecDeque<ConsoleLine>>,
+) -> impl IntoElement {
+    rect()
+        .horizontal()
+        .width(Size::fill())
+        .cross_align(Alignment::Center)
+        .content(Content::Flex)
+        .spacing(10.)
+        .padding(Gaps::new_symmetric(10., 14.))
+        .child(
+            rect().width(Size::flex(1.0)).child(
+                TextInput::new(search)
+                    .placeholder(t("oneclient.console.filter_placeholder"))
+                    .leading(
+                        Icon::new(IconType::SearchMd)
+                            .size(15.)
+                            .color(colors::fg_secondary())
+                            .into_element(),
+                    ),
+            ),
+        )
+        .child(
+            label()
+                .text(tf("oneclient.console.line_count", &[&shown]))
+                .font_size(text_size(11.))
+                .max_lines(1)
+                .color(colors::fg_secondary()),
+        )
+        .child(
+            SegmentedControl::new(severity)
+                .no_tint()
+                .segments(
+                    [
+                        Severity::All,
+                        Severity::Error,
+                        Severity::Warn,
+                        Severity::Info,
+                        Severity::Debug,
+                    ]
+                    .into_iter()
+                    .map(|value| Segment::new(value).label(value.label())),
+                )
+                .into_element(),
+        )
+        .child(
+            Button::new()
+                .secondary()
+                .on_press(move |_| entries.write().clear())
+                .child(Icon::new(IconType::Trash01).size(15.))
+                .text(t("oneclient.common.clear")),
+        )
+        .into_element()
+}
+
+/// Applying reloads the subscriber's filter so a target the launcher was not recording at all starts arriving
+fn filter_row(directives: State<String>, mut error: State<Option<String>>) -> impl IntoElement {
+    let apply = move |_| match logger::set_filter(&directives.read()) {
+        Ok(()) => error.set(None),
+        Err(err) => error.set(Some(err.to_string())),
+    };
+
+    let mut reset = directives;
+    let row = rect()
+        .horizontal()
+        .width(Size::fill())
+        .cross_align(Alignment::Center)
+        .content(Content::Flex)
+        .spacing(10.)
+        .padding(Gaps::new_symmetric(10., 14.))
+        .child(
+            label()
+                .text(t("oneclient.console.capture"))
+                .font_size(text_size(11.))
+                .max_lines(1)
+                .color(colors::fg_secondary()),
+        )
+        .child(rect().width(Size::flex(1.0)).child(
+            TextInput::new(directives).placeholder(t("oneclient.console.directives_placeholder")),
+        ))
+        .child(
+            Button::new()
+                .secondary()
+                .on_press(move |_| reset.set(logger::default_directives()))
+                .text(t("oneclient.console.defaults")),
+        )
+        .child(
+            Button::new()
+                .primary()
+                .on_press(apply)
+                .text(t("oneclient.common.apply")),
+        );
+
+    rect()
+        .vertical()
+        .width(Size::fill())
+        .child(row)
+        .maybe_child(error.read().clone().map(|message| {
+            label()
+                .text(message)
+                .font_size(text_size(11.))
+                .max_lines(2)
+                .width(Size::fill())
+                .padding(Gaps::new(0., 14., 10., 14.))
+                .color(colors::code_error())
+                .into_element()
+        }))
+        .into_element()
+}

@@ -1,0 +1,397 @@
+use directories::{BaseDirs, ProjectDirs};
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+use crate::domain::{ContentType, ProviderId};
+use crate::error::{PathsError, PathsResult};
+
+const QUALIFIER: &str = "org";
+const ORGANIZATION: &str = "Remix";
+
+#[cfg(not(debug_assertions))]
+const APPLICATION: &str = "RemixClient";
+
+#[cfg(debug_assertions)]
+const APPLICATION: &str = "RemixClient-dev";
+
+/// Upstream folder this project was forked from. The first launch moves it to
+/// the RemixClient folder so existing accounts, settings and instances survive.
+const PREVIOUS_ORGANIZATION: &str = "Polyfrost";
+
+#[cfg(not(debug_assertions))]
+const PREVIOUS_APPLICATION: &str = "OneClient";
+
+#[cfg(debug_assertions)]
+const PREVIOUS_APPLICATION: &str = "OneClient-dev";
+
+pub const SETTINGS_FILE: &str = "settings.json";
+pub const DATABASE_FILE: &str = "user_data.db";
+
+static DEFAULT_DIR: OnceLock<PathBuf> = OnceLock::new();
+static CONFIG_DIR_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+static DATA_DIR_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_launcher_dir(dir: PathBuf) {
+    let _ = CONFIG_DIR_OVERRIDE.set(dir.clone());
+    let _ = DATA_DIR_OVERRIDE.set(dir);
+}
+
+pub fn set_data_dir(dir: PathBuf) {
+    let _ = DATA_DIR_OVERRIDE.set(dir);
+}
+
+fn organization_dir() -> PathsResult<PathBuf> {
+    BaseDirs::new()
+        .map(|dirs| dirs.data_dir().join(ORGANIZATION))
+        .ok_or(PathsError::DataDirUnavailable)
+}
+
+#[must_use]
+pub fn legacy_dir() -> Option<PathBuf> {
+    ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+}
+
+fn resolve_default_dir() -> PathsResult<PathBuf> {
+    let standard = standard_dir()?;
+
+    if let Some(previous) = previous_brand_dir() {
+        adopt_previous_brand(&previous, &standard);
+        // A cross-drive move can fail. Keep using the untouched folder rather
+        // than silently starting from an empty one.
+        if !standard.exists() && previous.is_dir() {
+            return Ok(previous);
+        }
+    }
+
+    if let Some(legacy) = legacy_dir()
+        && legacy.join(SETTINGS_FILE).is_file()
+    {
+        return Ok(legacy);
+    }
+
+    Ok(standard)
+}
+
+fn previous_brand_dir() -> Option<PathBuf> {
+    let roaming = BaseDirs::new()?
+        .data_dir()
+        .join(PREVIOUS_ORGANIZATION)
+        .join(PREVIOUS_APPLICATION);
+    if roaming.is_dir() {
+        return Some(roaming);
+    }
+
+    ProjectDirs::from(QUALIFIER, PREVIOUS_ORGANIZATION, PREVIOUS_APPLICATION)
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+        .filter(|dir| dir.is_dir())
+}
+
+/// Renaming is atomic on one drive, so an interrupted first launch either has
+/// the old folder or the new one, never half of each.
+fn adopt_previous_brand(previous: &Path, target: &Path) {
+    if target.exists() {
+        return;
+    }
+    if let Some(parent) = target.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::rename(previous, target);
+}
+
+pub fn standard_dir() -> PathsResult<PathBuf> {
+    Ok(organization_dir()?.join(APPLICATION))
+}
+
+fn default_dir() -> PathsResult<&'static Path> {
+    if let Some(dir) = DEFAULT_DIR.get() {
+        return Ok(dir);
+    }
+
+    let _ = DEFAULT_DIR.set(resolve_default_dir()?);
+    DEFAULT_DIR
+        .get()
+        .map(PathBuf::as_path)
+        .ok_or(PathsError::DataDirUnavailable)
+}
+
+pub fn config_dir() -> PathsResult<&'static Path> {
+    if let Some(dir) = CONFIG_DIR_OVERRIDE.get() {
+        return Ok(dir);
+    }
+
+    default_dir()
+}
+
+pub fn data_dir() -> PathsResult<&'static Path> {
+    if let Some(dir) = DATA_DIR_OVERRIDE.get() {
+        return Ok(dir);
+    }
+
+    config_dir()
+}
+
+#[must_use]
+pub fn picker_start_dir() -> Option<PathBuf> {
+    organization_dir()
+        .ok()
+        .filter(|dir| dir.is_dir())
+        .or_else(|| data_dir().ok().map(Path::to_path_buf))
+}
+
+pub fn database_file() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join(DATABASE_FILE))
+}
+
+pub fn settings_file() -> PathsResult<PathBuf> {
+    Ok(config_dir()?.join(SETTINGS_FILE))
+}
+
+pub fn damaged_settings_file() -> PathsResult<PathBuf> {
+    Ok(config_dir()?.join("settings.json.corrupt"))
+}
+
+pub fn auth_file() -> PathsResult<PathBuf> {
+    Ok(config_dir()?.join("auth.json"))
+}
+
+pub fn themes_dir() -> PathsResult<PathBuf> {
+    Ok(config_dir()?.join("themes"))
+}
+
+pub fn logs_dir() -> PathsResult<PathBuf> {
+    Ok(config_dir()?.join("logs"))
+}
+
+pub fn java_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("java"))
+}
+
+/// Per-account skin and cape files for offline accounts.
+pub fn skins_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("skins"))
+}
+
+pub fn clusters_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("clusters"))
+}
+
+pub fn cluster_trash_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join(".trash"))
+}
+
+pub fn import_staging_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join(".import"))
+}
+
+pub fn cluster_reset_backups_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join(".reset-backups"))
+}
+
+pub fn shared_minecraft_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join(".minecraft"))
+}
+
+/// Presence marks a cluster folder as its own game dir instead of the shared `.minecraft`
+pub const DEDICATED_MARKER: &str = ".dedicated_directory";
+
+pub const SHARED_GROUP_MARKER: &str = ".shared_group";
+
+pub const INSTANCE_FILE: &str = ".instance.json";
+
+pub fn cluster_dir(folder_name: &str) -> PathsResult<PathBuf> {
+    Ok(clusters_dir()?.join(folder_name))
+}
+
+pub fn cluster_uses_dedicated_dir(folder_name: &str) -> bool {
+    cluster_dir(folder_name).is_ok_and(|dir| dir.join(DEDICATED_MARKER).exists())
+}
+
+pub fn shared_groups_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("shared"))
+}
+
+#[must_use]
+pub fn is_shared_group_name(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(parts.next(), Some(std::path::Component::Normal(_)))
+        && parts.next().is_none()
+        && !name.contains(['/', '\\'])
+}
+
+#[must_use]
+pub fn cluster_shared_group(folder_name: &str) -> Option<String> {
+    let marker = cluster_dir(folder_name).ok()?.join(SHARED_GROUP_MARKER);
+    let name = std::fs::read_to_string(marker).ok()?;
+    let name = name.trim();
+    is_shared_group_name(name).then(|| name.to_string())
+}
+
+pub fn shared_group_dir(group: Option<&str>) -> PathsResult<PathBuf> {
+    match group {
+        Some(group) => Ok(shared_groups_dir()?.join(group)),
+        None => shared_minecraft_dir(),
+    }
+}
+
+pub fn cluster_shared_dir(folder_name: &str) -> PathsResult<PathBuf> {
+    shared_group_dir(cluster_shared_group(folder_name).as_deref())
+}
+
+/// Lives here not on `Cluster` so the content layer can resolve it from a bare
+/// `ClusterRow` without duplicating the marker-file rule
+pub fn cluster_game_dir(folder_name: &str, isolated: bool) -> PathsResult<PathBuf> {
+    if isolated || cluster_uses_dedicated_dir(folder_name) {
+        cluster_dir(folder_name)
+    } else {
+        cluster_shared_dir(folder_name)
+    }
+}
+
+pub fn cluster_mods_dir(folder_name: &str) -> PathsResult<PathBuf> {
+    Ok(cluster_dir(folder_name)?.join(ContentType::Mod.folder_name()))
+}
+
+pub fn shared_mods_dir(group: Option<&str>) -> PathsResult<PathBuf> {
+    Ok(shared_group_dir(group)?.join(ContentType::Mod.folder_name()))
+}
+
+pub fn shared_mods_link(folder_name: &str) -> PathsResult<PathBuf> {
+    Ok(shared_mods_dir(cluster_shared_group(folder_name).as_deref())?.join(folder_name))
+}
+
+pub fn packages_cache_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("packages"))
+}
+
+pub fn caches_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("caches"))
+}
+
+pub fn bundles_dir() -> PathsResult<PathBuf> {
+    Ok(caches_dir()?.join("bundles"))
+}
+
+pub fn images_cache_dir() -> PathsResult<PathBuf> {
+    Ok(caches_dir()?.join("images"))
+}
+
+pub const LOCAL_IMAGE_SCHEME: &str = "local:";
+
+pub fn local_icons_dir() -> PathsResult<PathBuf> {
+    Ok(images_cache_dir()?.join("local"))
+}
+
+pub fn local_image_path(reference: &str) -> Option<PathBuf> {
+    let name = reference.strip_prefix(LOCAL_IMAGE_SCHEME)?;
+
+    if name.is_empty() || name.contains(['/', '\\']) || name.contains("..") {
+        return None;
+    }
+
+    Some(local_icons_dir().ok()?.join(name))
+}
+
+pub fn profiles_cache_dir() -> PathsResult<PathBuf> {
+    Ok(caches_dir()?.join("profiles"))
+}
+
+pub fn versions_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("versions"))
+}
+
+pub fn metadata_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata"))
+}
+
+pub fn libraries_dir() -> PathsResult<PathBuf> {
+    Ok(metadata_dir()?.join("libraries"))
+}
+
+pub fn natives_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("natives"))
+}
+
+pub fn assets_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("assets"))
+}
+
+pub fn assets_index_dir() -> PathsResult<PathBuf> {
+    Ok(assets_dir()?.join("indexes"))
+}
+
+pub fn assets_object_dir() -> PathsResult<PathBuf> {
+    Ok(assets_dir()?.join("objects"))
+}
+
+pub fn legacy_assets_dir() -> PathsResult<PathBuf> {
+    Ok(data_dir()?.join("metadata").join("resources"))
+}
+
+pub fn package_version_dir(
+    content_type: ContentType,
+    provider: ProviderId,
+    project_id: &str,
+    version_id: &str,
+) -> PathsResult<PathBuf> {
+    Ok(packages_cache_dir()?
+        .join(content_type.folder_name())
+        .join(provider.dir_name())
+        .join(project_id)
+        .join(version_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn a_shared_group_name_cannot_leave_the_shared_folder() {
+        assert!(is_shared_group_name("Survival"));
+        assert!(is_shared_group_name("My Friends (2)"));
+        for name in ["", ".", "..", "a/b", "a\\b", "../x", "/abs"] {
+            assert!(!is_shared_group_name(name), "{name:?}");
+        }
+    }
+
+    #[test]
+    fn the_launcher_sits_one_level_under_the_organization_folder() {
+        let organization = organization_dir().expect("a home directory");
+        assert_eq!(organization.file_name(), Some(OsStr::new(ORGANIZATION)));
+
+        let app = organization.join(APPLICATION);
+        let tail: Vec<&OsStr> = app.iter().rev().take(2).collect();
+
+        assert_eq!(
+            tail,
+            vec![OsStr::new(APPLICATION), OsStr::new(ORGANIZATION)],
+            "every RemixClient build takes a single folder inside the organization directory"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_install_roams_with_the_user() {
+        let organization = organization_dir().expect("a home directory");
+
+        assert!(
+            organization
+                .iter()
+                .any(|part| part == OsStr::new("Roaming")),
+            "settings and saves follow the user between machines; Local would strand them"
+        );
+    }
+
+    #[test]
+    fn a_debug_build_never_shares_a_folder_with_a_release_one() {
+        assert_eq!(
+            APPLICATION,
+            if cfg!(debug_assertions) {
+                "RemixClient-dev"
+            } else {
+                "RemixClient"
+            }
+        );
+    }
+}

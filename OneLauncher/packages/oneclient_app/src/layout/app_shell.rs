@@ -1,0 +1,608 @@
+use bytes::Bytes;
+use freya::animation::*;
+use freya::engine::prelude::{Paint, SamplingOptions, SkData, SkImage, SkRect};
+use freya::prelude::*;
+use freya::query::QueryStateData;
+use freya::router::*;
+use skia_safe::canvas::SrcRectConstraint;
+
+use skia_safe::{FilterMode, MipmapMode};
+
+use crate::Route;
+use crate::components::Button;
+use crate::components::{
+    ART_PREVIEW_EDGE, AppNavbar, CodeBlock, CrashDialog, DynamicArt, FileDropOverlay, Icon,
+    IconType, OverlayPopup, accept_drop, copy_button, use_provide_lobby,
+};
+use crate::i18n::{t, tf};
+use crate::layout::AnimatedAppOutlet;
+use crate::use_settings_snapshot;
+use oneclient_core::clusters::Cluster;
+use oneclient_core::images::BACKGROUND_IMAGE_EDGE;
+use oneclient_db::models::ClusterId;
+
+use crate::hooks::{
+    ActiveClusterState, BROWSER_COMPAT_DEFAULT, BrowserCompatState, BrowserStateStore,
+    BrowserTypeState, DataPackWorldState, settled_or_loading, use_active_cluster_id, use_clusters,
+    use_current_account, use_dispatch, use_game_snapshot, use_launcher, use_provide_active_cluster,
+    use_provide_browser_compat, use_provide_browser_state, use_provide_browser_type,
+    use_provide_datapack_world, use_splash,
+};
+use crate::theme::{colors, rounded, text_size};
+use crate::utils::home_cluster;
+use oneclient_events::LaunchStage;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+#[derive(PartialEq)]
+pub struct AppShell;
+
+impl Component for AppShell {
+    fn render(&self) -> impl IntoElement {
+        let active_cluster = use_state(|| None::<ClusterId>);
+        use_provide_active_cluster(ActiveClusterState(active_cluster));
+        use_provide_lobby();
+
+        let browser_compat = use_state(|| BROWSER_COMPAT_DEFAULT);
+        use_provide_browser_compat(BrowserCompatState(browser_compat));
+
+        let browser_state = use_state(HashMap::new);
+        use_provide_browser_state(BrowserStateStore(browser_state));
+
+        let browser_type = use_state(|| "mod".to_string());
+        use_provide_browser_type(BrowserTypeState(browser_type));
+
+        let datapack_world = use_state(HashMap::new);
+        use_provide_datapack_world(DataPackWorldState(datapack_world));
+
+        let dispatch = use_dispatch();
+        if let Some(account) = settled_or_loading(&use_current_account()) {
+            dispatch.sync_chat_owner(account.as_ref());
+        }
+
+        // `FileDrop` bubbles so anything a drop zone doesn't `stop_propagation()` lands here
+        let mut drop_hovering = use_state(|| false);
+        let drop_pending = use_state(Vec::<PathBuf>::new);
+        let dropped_modpacks = use_state(Vec::<PathBuf>::new);
+
+        let game = use_game_snapshot();
+
+        let running_cluster = game
+            .stages
+            .iter()
+            .find(|(_, s)| **s == LaunchStage::Running)
+            .map(|(id, _)| *id);
+
+        // Peeked so turning the setting back on mid-game doesn't yank the view
+        let station = use_dispatch().station();
+        use_side_effect_with_deps(&running_cluster, move |running| {
+            let open_log = station.peek().settings.settings.open_game_log_on_launch;
+            if let Some(cluster_id) = *running
+                && open_log
+            {
+                spawn(async move {
+                    let _ = RouterContext::get().push(Route::ProcessLogs { cluster_id });
+                });
+            }
+        });
+
+        rect()
+            .vertical()
+            .width(Size::fill())
+            .height(Size::fill())
+            .color(colors::fg_primary())
+            .overflow(Overflow::Clip)
+            .on_global_file_hover(move |_| drop_hovering.set(true))
+            .on_global_file_hover_cancelled(move |_| drop_hovering.set(false))
+            .on_file_drop(move |e: Event<FileEventData>| {
+                drop_hovering.set(false);
+                accept_drop(&e.file_paths, drop_pending, dropped_modpacks);
+            })
+            .child(AppNavbar)
+            .child(AppHomeBackground)
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .child(AnimatedRouter::<Route>::new(AnimatedAppOutlet)),
+            )
+            .child(FileDropOverlay {
+                hovering: drop_hovering,
+                pending: drop_pending,
+                modpacks: dropped_modpacks,
+            })
+            .maybe_child(
+                game.error
+                    .clone()
+                    .map(|message| LaunchErrorDialog { message }.into_element()),
+            )
+            .maybe_child(
+                game.current_crash()
+                    .filter(|_| game.error.is_none())
+                    .map(|crash| CrashDialog { crash }.into_element()),
+            )
+    }
+}
+
+pub fn hides_overlay(route: &Route) -> bool {
+    matches!(route, Route::Home {})
+}
+
+#[derive(PartialEq)]
+struct LaunchErrorDialog {
+    message: String,
+}
+
+impl Component for LaunchErrorDialog {
+    fn render(&self) -> impl IntoElement {
+        let dispatch = crate::hooks::use_dispatch();
+        let close = dispatch.clone();
+        let outside_close = dispatch.clone();
+        let copy_dispatch = dispatch.clone();
+        OverlayPopup::new()
+            .on_close(move |_| close.dismiss_game_error())
+            .child(
+                rect()
+                    .width(Size::window_percent(100.))
+                    .height(Size::window_percent(100.))
+                    .center()
+                    .on_press(move |_| outside_close.dismiss_game_error())
+                    .child(
+                        rect()
+                            .vertical()
+                            .width(Size::px(560.))
+                            .background(colors::page_elevated())
+                            .corner_radius(rounded(16.))
+                            .padding(Gaps::new_all(24.))
+                            .spacing(16.)
+                            .border(crate::ui::border_all_color(1., colors::component_border()))
+                            .on_press(|e: Event<PressEventData>| e.stop_propagation())
+                            .child(
+                                rect()
+                                    .horizontal()
+                                    .cross_align(Alignment::Center)
+                                    .spacing(10.)
+                                    .child(
+                                        Icon::new(IconType::AlertTriangle)
+                                            .size(20.)
+                                            .color(colors::danger()),
+                                    )
+                                    .child(
+                                        label()
+                                            .text(t("oneclient.layout.game_error.title"))
+                                            .font_size(text_size(18.))
+                                            .font_weight(FontWeight::SEMI_BOLD)
+                                            .color(colors::fg_primary()),
+                                    ),
+                            )
+                            .child(
+                                label()
+                                    .text(t("oneclient.layout.game_error.description"))
+                                    .font_size(text_size(13.))
+                                    .color(colors::fg_secondary()),
+                            )
+                            .child(
+                                CodeBlock::new(self.message.clone())
+                                    .background(colors::page())
+                                    .height(260.),
+                            )
+                            .child(
+                                rect()
+                                    .horizontal()
+                                    .width(Size::fill())
+                                    .main_align(Alignment::End)
+                                    .spacing(10.)
+                                    .child(copy_button(
+                                        self.message.clone(),
+                                        t("oneclient.layout.game_error.copied"),
+                                        copy_dispatch,
+                                    ))
+                                    .child(
+                                        Button::new()
+                                            .primary()
+                                            .on_press(move |_| dispatch.dismiss_game_error())
+                                            .text(t("oneclient.common.close")),
+                                    ),
+                            ),
+                    ),
+            )
+    }
+}
+
+pub(crate) fn appshell_overlay(alpha: f32) -> Rect {
+    let alpha = alpha.clamp(0., 1.);
+    let scale = |a: u8| (f32::from(a) * alpha).round() as u8;
+    let top = if colors::is_light() { 215 } else { 100 };
+
+    rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .position(Position::new_absolute())
+        .interactive(false)
+        .layer(Layer::Relative(2))
+        .child(
+            rect()
+                .height(Size::px(200.))
+                .width(Size::fill())
+                .background(
+                    LinearGradient::new()
+                        .stop((colors::shade().with_a(scale(top)), 0.))
+                        .stop((colors::page().with_a(scale(255)), 95.0)),
+                ),
+        )
+        .child(
+            rect()
+                .height(Size::fill())
+                .width(Size::fill())
+                .background(colors::page().with_a(scale(255))),
+        )
+}
+
+pub const HOME_BACKGROUND_ASSET: &str = "backgrounds/CavesAndCliffs.jpg";
+
+fn home_art(cluster: Option<&Cluster>) -> DynamicArt {
+    cluster
+        .map_or_else(DynamicArt::fallback, DynamicArt::for_cluster)
+        .max_edge(BACKGROUND_IMAGE_EDGE)
+        .preview_edge(ART_PREVIEW_EDGE)
+}
+
+/// Warms the home art at the root so its three async hops overlap startup behind the
+/// splash left to Home the fallback lingers on screen after the curtain lifts
+#[derive(PartialEq, Clone, Copy)]
+pub struct HomeArtPrefetch;
+
+impl Component for HomeArtPrefetch {
+    fn render(&self) -> impl IntoElement {
+        // Before the launcher is ready every query errors and a settled error is not
+        // retried until a new subscriber mounts
+        if !use_launcher().ready {
+            return rect().into_element();
+        }
+        HomeArtWarm.into_element()
+    }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+struct HomeArtWarm;
+
+impl Component for HomeArtWarm {
+    fn render(&self) -> impl IntoElement {
+        let clusters_query = use_clusters();
+        let art = {
+            let reader = clusters_query.read();
+            let state = reader.state();
+            // No active cluster this early so this picks the same one `AppHomeBackground` will
+            let clusters = state.ok().map_or(&[][..], Vec::as_slice);
+            home_art(home_cluster(clusters, None))
+        };
+        let _ = art.use_bytes();
+
+        rect().into_element()
+    }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub struct AppHomeBackground;
+
+impl Component for AppHomeBackground {
+    fn render(&self) -> impl IntoElement {
+        let parallax_enabled = use_settings_snapshot().settings.dynamic_background_enabled;
+        let clusters_query = use_clusters();
+        let active_id = use_active_cluster_id();
+        let launcher = use_launcher();
+        let splash = use_splash();
+
+        // The home view is populated once these settle which releases the splash curtain
+        let clusters_settled = matches!(
+            &*clusters_query.read().state(),
+            QueryStateData::Settled { .. }
+        );
+        let home_ready = clusters_settled && !launcher.fetching;
+        use_side_effect_with_deps(&home_ready, move |&ready| {
+            if ready {
+                let mut flag = splash.home_ready;
+                if !*flag.peek() {
+                    flag.set(true);
+                }
+            }
+        });
+
+        let (art, art_dep) = {
+            let reader = clusters_query.read();
+            let state = reader.state();
+            let clusters = state.ok().map_or(&[][..], Vec::as_slice);
+            let chosen = home_cluster(clusters, *active_id.read());
+            let dep = chosen.map(|c| c.id);
+            (home_art(chosen), dep)
+        };
+
+        let (_, art_bytes) = art.use_bytes();
+
+        let fade = use_animation_with_dependencies(&art_dep, |conf, _| {
+            conf.on_creation(OnCreation::Run);
+            conf.on_change(OnChange::Rerun);
+            AnimNum::new(0., 1.)
+                .time(520)
+                .ease(Ease::Out)
+                .function(Function::Cubic)
+        });
+        let fade_opacity = fade.get().value();
+
+        ParallaxArt {
+            art_bytes,
+            fade_opacity,
+            parallax_enabled,
+        }
+        .into_element()
+    }
+}
+
+#[derive(PartialEq, Clone)]
+pub struct ParallaxArt {
+    pub art_bytes: Bytes,
+    pub fade_opacity: f32,
+    pub parallax_enabled: bool,
+}
+
+impl Component for ParallaxArt {
+    fn render(&self) -> impl IntoElement {
+        let mut size = use_state(|| (0f32, 0f32));
+        let mut target = use_state(|| (0f32, 0f32));
+        let mut current = use_state(|| (0f32, 0f32));
+
+        let mut anim_task = use_state(|| None::<OwnedTaskHandle>);
+        use_side_effect_with_deps(&self.parallax_enabled, move |enabled| {
+            if *enabled {
+                let handle = spawn(async move {
+                    let window = Platform::get().current_window();
+
+                    const FRAME: std::time::Duration = std::time::Duration::from_millis(33);
+                    const STEP: f32 = 0.12;
+                    const SETTLE: f32 = 0.002;
+
+                    loop {
+                        let (tx, ty) = *target.peek();
+                        let (cx, cy) = *current.peek();
+
+                        if (tx - cx).abs() > SETTLE || (ty - cy).abs() > SETTLE {
+                            current.set((cx + (tx - cx) * STEP, cy + (ty - cy) * STEP));
+                            window.request_redraw();
+                        }
+
+                        tokio::time::sleep(FRAME).await;
+                    }
+                });
+                anim_task.set(Some(handle.owned()));
+            } else {
+                anim_task.set(None);
+                target.set((0.0, 0.0));
+                current.set((0.0, 0.0));
+            }
+        });
+
+        let mut img_cache = use_state(|| None::<(usize, SkImage)>);
+        let src_ptr = self.art_bytes.as_ptr() as usize;
+        let cached = img_cache.peek().clone();
+        let image = match cached {
+            Some((ptr, img)) if ptr == src_ptr => Some(img),
+            _ => {
+                let decoded = decode_background_image(&self.art_bytes);
+                if let Some(img) = &decoded {
+                    img_cache.set(Some((src_ptr, img.clone())));
+                }
+                decoded
+            }
+        };
+
+        let parallax_enabled = self.parallax_enabled;
+        let fade_opacity = self.fade_opacity;
+
+        let render_cb = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+            let RenderTarget::Background { canvas, .. } = &ctx.target else {
+                return;
+            };
+            let Some(image) = &image else {
+                return;
+            };
+            let (w, h) = (ctx.size.width, ctx.size.height);
+            if w <= 0.0 || h <= 0.0 {
+                return;
+            }
+            let iw = image.width() as f32;
+            let ih = image.height() as f32;
+            if iw <= 0.0 || ih <= 0.0 {
+                return;
+            }
+
+            let (cx, cy) = if parallax_enabled {
+                current()
+            } else {
+                (0.0, 0.0)
+            };
+
+            let canvas_aspect = w / h;
+            let img_aspect = iw / ih;
+            let (mut crop_w, mut crop_h) = if img_aspect > canvas_aspect {
+                (ih * canvas_aspect, ih)
+            } else {
+                (iw, iw / canvas_aspect)
+            };
+
+            const SCALE: f32 = 1.10;
+            crop_w /= SCALE;
+            crop_h /= SCALE;
+
+            const STRENGTH: f32 = 0.01;
+            let pan_x = cx * w * 0.5 * STRENGTH * (crop_w / w);
+            let pan_y = cy * h * 0.5 * STRENGTH * (crop_h / h);
+            let ccx = iw * 0.5 - pan_x;
+            let ccy = ih * 0.5 - pan_y;
+
+            let src = SkRect::new(
+                ccx - crop_w * 0.5,
+                ccy - crop_h * 0.5,
+                ccx + crop_w * 0.5,
+                ccy + crop_h * 0.5,
+            );
+            let dst = SkRect::new(0.0, 0.0, w, h);
+
+            let mut paint = Paint::default();
+            paint.set_anti_alias(true);
+            // Linear sampling: the parallax moves this image every frame, and a
+            // cubic resample of a full-window bitmap costs far more than the
+            // difference is worth on a photo background.
+            let sampling = SamplingOptions::new(FilterMode::Linear, MipmapMode::Linear);
+            canvas.draw_image_rect_with_sampling_options(
+                image,
+                Some((&src, SrcRectConstraint::Strict)),
+                dst,
+                sampling,
+                &paint,
+            );
+        });
+
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .overflow(Overflow::Clip)
+            .position(Position::new_absolute())
+            .background(colors::art_backdrop())
+            .interactive(false)
+            .on_sized(move |e: Event<SizedEventData>| {
+                let (sw, sh) = (e.area.width(), e.area.height());
+                let (pw, ph) = *size.peek();
+                if (pw - sw).abs() > 0.5 || (ph - sh).abs() > 0.5 {
+                    size.set((sw, sh));
+                }
+            })
+            .maybe(parallax_enabled, |el| {
+                el.on_capture_global_pointer_move(move |e: Event<PointerEventData>| {
+                    let (sw, sh) = *size.peek();
+                    if sw > 0.0 && sh > 0.0 {
+                        let loc = e.global_location();
+                        target.set((
+                            (loc.x as f32 / sw) * 2.0 - 1.0,
+                            (loc.y as f32 / sh) * 2.0 - 1.0,
+                        ));
+                    }
+                })
+            })
+            .child(
+                rect()
+                    .expanded()
+                    .position(Position::new_absolute())
+                    .layer(Layer::Relative(1))
+                    .child(gradient_overlay_radial()),
+            )
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .position(Position::new_absolute())
+                    .layer(Layer::Relative(0))
+                    .opacity(fade_opacity)
+                    .child(
+                        rect()
+                            .key(src_ptr as u64)
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .background(render_cb),
+                    ),
+            )
+    }
+}
+
+fn decode_background_image(bytes: &Bytes) -> Option<SkImage> {
+    let data = unsafe { SkData::new_bytes(bytes) };
+    let img = SkImage::from_encoded(data)?;
+    Some(img.make_raster_image(None, None).unwrap_or(img))
+}
+
+const VIGNETTE_SPOTLIGHT_SHADER: &str = r#"
+uniform float2 iResolution;
+
+half4 main(float2 fragCoord) {
+    float2 uv = fragCoord / iResolution;
+
+    float2 center = float2(0.80, 0.45);
+    float2 distVec = uv - center;
+
+    float2 dir = normalize(distVec + float2(0.00001));
+
+    float leftScale = 1.8;
+    float rightScale = 4.5;
+    float scaleX = mix(leftScale, rightScale, smoothstep(-1.0, 1.0, dir.x));
+
+    float topScale = 2.2;
+    float bottomScale = 2.2;
+    float scaleY = mix(topScale, bottomScale, smoothstep(-1.0, 1.0, dir.y));
+
+    distVec.x *= scaleX;
+    distVec.y *= scaleY;
+
+    float dist = length(distVec);
+
+    float vignette = smoothstep(0.0, 1.2, dist);
+    vignette = pow(vignette, 1.3);
+
+    float maxDarkness = 0.8;
+    float alpha = vignette * maxDarkness;
+
+    return half4(0.0, 0.0, 0.0, alpha);
+}
+"#;
+
+fn gradient_overlay_radial() -> impl IntoElement {
+    let effect = use_hook(|| {
+        freya::engine::prelude::RuntimeEffect::make_for_shader(VIGNETTE_SPOTLIGHT_SHADER, None)
+            .expect("Failed to compile vignette shader")
+    });
+
+    rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .position(Position::new_absolute())
+        .background(ShaderFill::new(
+            VIGNETTE_SPOTLIGHT_SHADER,
+            effect,
+            move |effect, bounds| {
+                let w = bounds.width();
+                let h = bounds.height();
+
+                #[rustfmt::skip]
+                let uniforms: [f32; 2] = [w, h];
+
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        uniforms.as_ptr() as *const u8,
+                        std::mem::size_of_val(&uniforms),
+                    )
+                };
+
+                effect.make_shader(freya::engine::prelude::Data::new_copy(bytes), &[], None)
+            },
+        ))
+}
+
+pub(crate) fn navigate_back(at_home: bool) {
+    let router = RouterContext::get();
+    if router.can_go_back() {
+        router.go_back();
+    } else if !at_home {
+        let _ = router.push(Route::Home {});
+    }
+}
+
+pub(crate) fn back_button(destination: &str) -> impl IntoElement {
+    Button::new()
+        .ghost()
+        .small()
+        .on_press(|_| {
+            // Only rendered off home so the history-empty fallback is reachable
+            navigate_back(false);
+        })
+        .margin(Gaps::new(0., 0., 0., 32.))
+        .child(Icon::new(IconType::ArrowLeft).size(12.))
+        .text(tf("oneclient.layout.back_to", &[&destination]))
+}

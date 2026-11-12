@@ -1,0 +1,331 @@
+mod actions;
+mod active_cluster;
+mod chat;
+mod debounce;
+mod overlay_claims;
+mod queries;
+mod selection;
+mod shortcut_actions;
+mod sync_actions;
+mod view_state;
+
+pub use chat::{
+    ChatJob, chat_draft, load_conversations, load_invite_games, load_roster, load_self_status,
+    mark_read as mark_chat_read, notify_chat, player_name, resync_chat, save_chat_draft,
+    start_invite_join,
+};
+
+pub use debounce::use_debounced;
+pub use overlay_claims::{
+    OverlayClaims, use_overlay_claim, use_overlay_claim_when, use_overlay_claims,
+    use_provide_overlay_claims,
+};
+pub use selection::{Selection, use_selection};
+pub use view_state::{PersistedView, use_view_state};
+
+pub use active_cluster::{
+    ActiveClusterState, BROWSER_COMPAT_DEFAULT, BrowserCompatState, BrowserStateStore,
+    BrowserTypeState, BrowserUiState, DataPackWorldState, DisableConfirmState, EssentialGuardKind,
+    EssentialGuardState, Guarded, LinkConfirmState, OnboardingSelectionState, PendingEssential,
+    SplashState, StartMaximizedState, use_active_cluster_id, use_browser_compat,
+    use_browser_state_store, use_browser_type, use_datapack_world, use_disable_confirm,
+    use_essential_guard, use_link_confirm, use_onboarding_selection, use_provide_active_cluster,
+    use_provide_browser_compat, use_provide_browser_state, use_provide_browser_type,
+    use_provide_datapack_world, use_provide_disable_confirm, use_provide_essential_guard,
+    use_provide_link_confirm, use_provide_onboarding_selection, use_provide_splash,
+    use_provide_start_maximized, use_splash, use_start_maximized,
+};
+
+pub(crate) use actions::listed;
+pub use actions::{
+    Actions, AlternativePick, ExternalImportJob, NotificationBuilder, PumpSignal, exporting,
+    modpack_job_running, update_check_running,
+};
+pub use actions::{
+    CloudSignal, add_collaborator, cloud_engine, cloud_sync_signal, forget_deleted_cluster,
+    load_collaborators, load_is_shared, load_owner_check, load_setting_files, load_sync_left_out,
+    remove_collaborator,
+};
+pub use queries::ALL_VERSIONS;
+pub(crate) use queries::use_folder_watch;
+pub use queries::{
+    AddOfflineAccountKeys, AvailableBundlesQuery, BROWSE_PAGE_SIZE, BeginMicrosoftLoginMutation,
+    CachedImageQuery, CancelMicrosoftLoginKeys, CancelMicrosoftLoginMutation, ClusterAction,
+    ClusterBundles, ClusterLogsQuery, ClusterMutation, DisableWarningsQuery, DiscardLeftoversKeys,
+    DiscardLeftoversMutation, FinishMicrosoftLoginMutation, GameVersion, JavaMajorsQuery,
+    LeftoversQuery, LogAction, LogContentQuery, MigrationQuery, OnboardingBundlesQuery,
+    RefreshAccountKeys, RemoveAccountKeys, ScreenshotAction, SetDefaultAccountKeys, StorageAction,
+    StorageActionMutation, StorageReportQuery, TermsQuery, UploadLogKeys, UploadLogMutation,
+    UseDiscardLeftovers, UseLogAction, UseRefreshAccount, UseRemoveAccount, UseScreenshotAction,
+    UseSetDefaultAccount, UseStorageAction, UseUploadLog, VERSIONS_PAGE_SIZE, available_bundles,
+    bundle_overrides_map, bundles_with_status_items, category_list, changelog_entries,
+    changelog_error, changelog_is_loading, cluster_art_url, cluster_content_items,
+    content_type_for_slug, disable_warnings, game_versions, has_migration_data,
+    imported_modpacks_list, invalidate_auth_queries, invalidate_cluster_content_queries,
+    invalidate_cluster_queries, invalidate_java_queries, invalidate_leftovers_queries,
+    invalidate_logs_queries, invalidate_profile_queries, invalidate_screenshots_queries,
+    invalidate_skin_library, invalidate_storage_queries, java_majors, java_runtimes,
+    latest_changelog_version, loaded_image, loader_versions, login_code_already_handled,
+    migration_detection, modpack_sources_map, mutation_error, mutation_is_pending,
+    mutation_is_running, mutation_ok, onboarding_bundles_items, package_meta_batch,
+    package_updates, pick_version_metadata, project_detail, project_web_urls, provider_versions,
+    query_error, query_is_busy, query_is_loading, refresh_version_art_gallery,
+    reset_login_code_dedup, resolve_art_url, search_items, search_pending, search_total,
+    settled_or_loading, stale_hashes, terms_document, terms_error, terms_is_loading, try_account,
+    try_accounts, try_cluster_analytics, try_cluster_logs, try_cluster_screenshots,
+    try_default_account, try_game_profile, try_global_analytics, try_leftovers, try_log_content,
+    try_storage_report, use_account, use_accounts, use_add_microsoft_account,
+    use_add_offline_account, use_available_bundles, use_begin_microsoft_login,
+    use_bundle_overrides, use_bundle_updates, use_bundles_with_status, use_cached_image,
+    use_cancel_microsoft_login, use_changelog, use_cluster, use_cluster_analytics,
+    use_cluster_content, use_cluster_logs, use_cluster_mutation, use_cluster_profile,
+    use_cluster_screenshots, use_cluster_settings, use_clusters, use_current_account,
+    use_default_account, use_disable_warnings, use_discard_leftovers, use_finish_microsoft_login,
+    use_game_profile, use_game_versions, use_global_analytics, use_hardware, use_imported_modpacks,
+    use_java_majors, use_java_runtimes, use_leftovers, use_loader_versions, use_local_image,
+    use_log_action, use_log_content, use_migratable_routes, use_migration, use_modpack_sources,
+    use_mods_folder_sync, use_named_profiles, use_onboarding_bundles, use_package_categories,
+    use_package_meta_batch, use_package_project, use_package_search, use_package_updates,
+    use_package_versions_when, use_player_profile, use_player_skin, use_project_web_urls,
+    use_provider_versions, use_refresh_account, use_refresh_all_accounts, use_remove_account,
+    use_screenshot_action, use_screenshot_folder_watch, use_servers, use_set_default_account,
+    use_shadowed_mods, use_shared_groups, use_skin_library, use_storage_action, use_storage_report,
+    use_terms, use_upload_log, use_version_art, use_version_art_gallery, use_version_loaders,
+    use_version_metadata, use_versions, version_list, versions_metadata, versions_total,
+};
+pub use queries::{BisectAction, BisectMutation, use_bisect, use_bisect_mutation};
+pub use queries::{GraphicsBackendQuery, use_graphics_backend};
+pub use queries::{
+    add_world_datapacks, backup_world_now, delete_world, delete_world_datapack,
+    invalidate_world_backups, invalidate_world_contents, restore_world_backup, spawn_world_task,
+    try_cluster_worlds, try_world_backups, try_world_datapacks, try_world_size, use_cluster_worlds,
+    use_saves_folder_watch, use_world_backups, use_world_datapacks, use_world_size,
+};
+pub use queries::{external_launchers, use_external_launchers};
+pub use queries::{import_screening, retry_import_screening, use_import_screening};
+
+use crate::chat::{ChatInbox, ChatRoster, ChatThread};
+use crate::notifications::NotificationSnapshot;
+use crate::state::{
+    AppChannel, AppState, GameState, InstallState, LauncherInit, LoginProgress,
+    ReleaseMigrationPrompt, RelocationState, SettingsState, StorageScanProgress,
+};
+use freya::prelude::*;
+use freya::radio::{RadioStation, use_radio};
+
+pub fn use_provide_station(
+    init: impl FnOnce() -> AppState + 'static,
+) -> RadioStation<AppState, AppChannel> {
+    let contexts = GlobalContexts::get();
+    let station = use_hook(move || {
+        contexts
+            .get_context_or_insert(|| RadioStation::<AppState, AppChannel>::create_global(init()))
+    });
+
+    use_provide_context(|| station);
+    station
+}
+
+pub fn use_provide_actions(actions: &Actions) {
+    let actions = actions.clone();
+    let contexts = GlobalContexts::get();
+    use_hook(move || contexts.insert_context(actions));
+}
+
+pub fn use_dispatch() -> Actions {
+    GlobalContexts::get().get_context::<Actions>()
+}
+
+/// Wakes its component only when that channel is written so a toast tick does
+/// not re-render a component reading only `data_dir`
+pub fn use_launcher() -> LauncherInit {
+    use_radio(AppChannel::Launcher).read().launcher.clone()
+}
+
+pub fn use_release_migration_checking(cluster_id: i64) -> bool {
+    use_radio(AppChannel::ReleaseMigration)
+        .read()
+        .release_migration_checking
+        .contains(&cluster_id)
+}
+
+pub fn use_release_migration() -> Option<ReleaseMigrationPrompt> {
+    use_radio(AppChannel::ReleaseMigration)
+        .read()
+        .release_migration
+        .clone()
+}
+
+pub fn use_relocation() -> RelocationState {
+    use_radio(AppChannel::Relocation).read().relocation.clone()
+}
+
+pub fn use_settings_snapshot() -> SettingsState {
+    use_radio(AppChannel::Settings).read().settings.clone()
+}
+
+/// Built on read not published on write cloning the inbox on every one of a
+/// download's tens of thousands of engine changes was the channel's main cost
+pub fn use_notifications_snapshot() -> NotificationSnapshot {
+    let radio = use_radio(AppChannel::Notifications);
+    let state = radio.read();
+    state.notifications.snapshot(
+        &state.inbox,
+        state.center_open,
+        crate::events::prompt_view(&state),
+    )
+}
+
+pub fn use_account_switcher_open() -> bool {
+    use_radio(AppChannel::AccountSwitcher)
+        .read()
+        .account_switcher_open
+}
+
+pub fn use_control_center_open() -> bool {
+    use_radio(AppChannel::ControlCenter)
+        .read()
+        .control_center_open
+}
+
+pub fn use_cloud_sync() -> crate::state::CloudSyncState {
+    use_radio(AppChannel::CloudSync).read().cloud_sync.clone()
+}
+
+pub fn use_share_progress(cluster_id: i64) -> Option<crate::state::ShareProgress> {
+    use_radio(AppChannel::Share)
+        .read()
+        .shares
+        .get(&cluster_id)
+        .cloned()
+}
+
+pub fn use_chat_allowed() -> bool {
+    let settings = use_radio(AppChannel::Settings);
+    crate::chat::chat_allowed(
+        &settings.read().settings.settings,
+        oneclient_common::consent::declined(),
+    )
+}
+
+pub fn use_social_open() -> bool {
+    use_radio(AppChannel::Social).read().social_open
+}
+
+pub fn use_social_tab() -> crate::state::SocialTab {
+    use_radio(AppChannel::Social).read().social_tab
+}
+
+pub fn use_social_popped_notice() -> bool {
+    use_radio(AppChannel::Social).read().social_popped_notice
+}
+
+pub fn use_game_snapshot() -> GameState {
+    use_radio(AppChannel::Game).read().game.clone()
+}
+
+pub fn use_installs_snapshot() -> InstallState {
+    use_radio(AppChannel::Installs).read().installs.clone()
+}
+
+pub fn use_chat_inbox() -> ChatInbox {
+    use_radio(AppChannel::Chat).read().chat.inbox()
+}
+
+pub fn use_chat_roster() -> ChatRoster {
+    use_radio(AppChannel::ChatRoster).read().chat.roster()
+}
+
+pub fn use_chat_thread(group_id: i32) -> ChatThread {
+    use_radio(AppChannel::Chat).read().chat.thread(group_id)
+}
+
+pub fn use_chat_unread() -> bool {
+    let roster = use_radio(AppChannel::ChatRoster);
+    let chat = use_radio(AppChannel::Chat);
+    let incoming = roster.read().chat.has_incoming_requests();
+    incoming || chat.read().chat.has_unread()
+}
+
+pub fn use_player_online(player: uuid::Uuid) -> bool {
+    let presence = use_radio(AppChannel::ChatPresence);
+    let roster = use_radio(AppChannel::ChatRoster);
+    let _ = roster.read();
+    presence.read().chat.is_online(player)
+}
+
+pub fn use_chat_online_set(players: Vec<uuid::Uuid>) -> std::collections::HashSet<uuid::Uuid> {
+    let presence = use_radio(AppChannel::ChatPresence);
+    let roster = use_radio(AppChannel::ChatRoster);
+    let _ = roster.read();
+    let state = presence.read();
+    players
+        .into_iter()
+        .filter(|player| state.chat.is_online(*player))
+        .collect()
+}
+
+pub fn use_chat_online_count(members: &[uuid::Uuid]) -> usize {
+    let presence = use_radio(AppChannel::ChatPresence);
+    let roster = use_radio(AppChannel::ChatRoster);
+    let chat = use_radio(AppChannel::Chat);
+    let _ = roster.read();
+    let _ = presence.read();
+    chat.read().chat.online_count(members)
+}
+
+pub fn use_invite_join() -> Option<crate::state::InviteJoinPrompt> {
+    use_radio(AppChannel::Social).read().invite_join.clone()
+}
+
+pub fn use_chat_invite_game(invite_id: i32) -> Option<crate::chat::InviteGame> {
+    use_radio(AppChannel::Chat)
+        .read()
+        .chat
+        .invite_game(invite_id)
+        .cloned()
+}
+
+pub fn use_chat_invites() -> Vec<crate::chat::ChatInvite> {
+    use_radio(AppChannel::Chat).read().chat.invites()
+}
+
+pub fn use_chat_friend_request() -> crate::chat::FriendRequestStatus {
+    use_radio(AppChannel::Chat)
+        .read()
+        .chat
+        .friend_request
+        .clone()
+}
+
+pub fn use_chat_self_status() -> oneclient_polyplus::PlayerStatus {
+    use_radio(AppChannel::Chat).read().chat.self_status
+}
+
+pub fn use_storage_scan_progress() -> Option<StorageScanProgress> {
+    use_radio(AppChannel::StorageScan)
+        .read()
+        .storage_scan
+        .clone()
+}
+
+pub fn use_pending_launch() -> Option<String> {
+    use_radio(AppChannel::PendingLaunch)
+        .read()
+        .pending_launch
+        .clone()
+}
+
+pub fn use_pending_share() -> Option<String> {
+    use_radio(AppChannel::PendingLaunch)
+        .read()
+        .pending_share
+        .clone()
+}
+
+pub fn use_microsoft_login_status() -> Option<LoginProgress> {
+    use_radio(AppChannel::MicrosoftLogin)
+        .read()
+        .microsoft_login
+        .clone()
+}
