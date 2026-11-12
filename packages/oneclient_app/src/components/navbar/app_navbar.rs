@@ -19,9 +19,9 @@ use crate::{
 };
 
 const NAVBAR_INTRO_MS: u64 = 460;
-const LOGO_HIDE_NAVBAR_W: f32 = 1100.;
+const LOGO_HIDE_NAVBAR_W: f32 = 1280.;
 const NAVBAR_SIDE_PADDING_PX: f32 = 40.;
-const NAV_LINK_SPACING_PX: f32 = 36.;
+const NAV_LINK_SPACING_PX: f32 = 26.;
 const COMPACT_LOGO_PX: f32 = 32.;
 
 #[derive(PartialEq)]
