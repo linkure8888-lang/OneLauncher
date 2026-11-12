@@ -11,7 +11,7 @@ use crate::layout::SettingsShell;
 use crate::view::{
     NotFound, Relocating, Startup,
     app::{
-        Clusters, Debug, Home, Servers, Skins, Stats,
+        Clusters, Debug, Friends, Home, Servers, Skins, Stats,
         browser::{Browser, BrowserPackage},
         cluster::{
             ClusterDataPacks, ClusterLogs, ClusterMods, ClusterOverview, ClusterScreenshots,
@@ -65,6 +65,8 @@ pub enum Route {
             Home {},
             #[route("/app/clusters")]
             Clusters {},
+            #[route("/app/friends")]
+            Friends {},
 
             #[layout(ClusterShell)]
                 #[route("/app/clusters/:cluster_id")]
@@ -157,6 +159,7 @@ impl Route {
             Route::OnboardingSummary { .. } => t("oneclient.routes.onboarding_summary"),
             Route::Home { .. } => t("oneclient.routes.home"),
             Route::Clusters { .. } => t("oneclient.routes.clusters"),
+            Route::Friends { .. } => t("oneclient.routes.friends"),
             Route::ClusterOverview { .. } => t("oneclient.routes.cluster_overview"),
             Route::ClusterLogs { .. } => t("oneclient.routes.cluster_logs"),
             Route::ProcessLogs { .. } => t("oneclient.routes.process_logs"),

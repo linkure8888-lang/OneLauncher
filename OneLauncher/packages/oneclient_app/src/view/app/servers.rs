@@ -122,9 +122,14 @@ impl Component for ServerRow {
 
         let address = format!("{}:{}", self.entry.address, self.entry.port);
         let address_for_copy = address.clone();
+        let server_id_for_click = self.entry.id.clone();
         let copy = {
             let dispatch = dispatch.clone();
             move |_: Event<PressEventData>| {
+                let sid = server_id_for_click.clone();
+                spawn(async move {
+                    oneclient_core::servers::record_server_click(&sid).await;
+                });
                 if freya::text_edit::Clipboard::set(address_for_copy.clone()).is_ok() {
                     dispatch.notify(t("oneclient.servers.copied")).send();
                 }
@@ -174,7 +179,7 @@ impl Component for ServerRow {
                                 (!self.entry.region.is_empty())
                                     .then(|| badge(self.entry.region.clone(), colors::brand())),
                             )
-                            .maybe_child(self.entry.promoted.then(|| {
+                            .maybe_child(self.entry.is_promoted.then(|| {
                                 badge(
                                     t("oneclient.servers.promoted").to_string(),
                                     colors::code_warn(),
@@ -211,7 +216,7 @@ impl Component for ServerRow {
                     .child(Icon::new(IconType::Link03).size(13.))
                     .text(t("oneclient.servers.copy")),
             )
-            .maybe_child(self.entry.url.clone().map(|url| {
+            .maybe_child(self.entry.sponsor_url.clone().map(|url| {
                 Button::new()
                     .ghost()
                     .small()

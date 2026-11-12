@@ -1,6 +1,7 @@
 mod analytics;
 mod clusters;
 mod debug;
+mod friends;
 mod home;
 mod servers;
 mod skins;
@@ -75,6 +76,7 @@ pub(crate) use clusters::{
 };
 pub use clusters::{Clusters, ExportInstanceModal};
 pub use debug::Debug;
+pub use friends::Friends;
 pub use home::Home;
 pub use servers::Servers;
 pub use skins::Skins;

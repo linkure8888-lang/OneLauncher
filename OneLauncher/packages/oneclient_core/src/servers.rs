@@ -11,6 +11,9 @@
 
 use std::time::{Duration, Instant};
 
+mod servers_analytics;
+pub use servers_analytics::{record_server_click, get_clicks_last_30_days, upload_analytics_stub, ServerClickRecord, ServerAnalyticsStore};
+
 use serde::{Deserialize, Serialize};
 
 use crate::LauncherResult;
@@ -38,11 +41,11 @@ pub struct ServerEntry {
     #[serde(default)]
     pub tags: Vec<String>,
     /// True when the entry is paid placement. Always shown as a label.
-    #[serde(default)]
-    pub promoted: bool,
+    #[serde(default, alias = "promoted")]
+    pub is_promoted: bool,
     /// Optional web page (site, chat) shown behind an external-link button.
-    #[serde(default)]
-    pub url: Option<String>,
+    #[serde(default, alias = "url")]
+    pub sponsor_url: Option<String>,
 }
 
 fn default_port() -> u16 {
@@ -72,6 +75,8 @@ impl ServerList {
                 server.port = default_port();
             }
         }
+        // Sort so promoted servers are always at the top
+        self.servers.sort_by(|a, b| b.is_promoted.cmp(&a.is_promoted));
         self
     }
 }
