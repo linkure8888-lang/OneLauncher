@@ -105,21 +105,35 @@ jobs:
         run: cargo install cargo-packager --locked --version 0.11.8
 
       # Linux is split so a broken AppImage tool cannot take the .deb down with it.
+      # A plain tarball is the guaranteed Linux artifact: it needs no dpkg, no
+      # AppImage tooling and no desktop integration, so Linux users always get a
+      # working build even when the fancy formats fail.
+      - name: Package (Linux tarball)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f&&/^version/{gsub(/[^0-9.]/,"");print;exit}' Cargo.toml)
+          mkdir -p dist
+          tar -czf "dist/RemixClient_${VERSION}_linux_x86_64.tar.gz" -C target/release oneclient_app
+          ls -la dist
+
       - name: Package (Linux deb)
         if: runner.os == 'Linux'
-        run: cargo packager -p oneclient_app --release -f deb
+        continue-on-error: true
+        run: cargo packager -p oneclient_app --release -f deb --verbose
 
       - name: Package (Linux AppImage)
         if: runner.os == 'Linux'
         continue-on-error: true
-        run: cargo packager -p oneclient_app --release -f appimage
+        run: cargo packager -p oneclient_app --release -f appimage --verbose
 
       - name: Package
         if: runner.os != 'Linux'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo packager -p oneclient_app --release -f ${{ matrix.formats }} ${TARGET:+--target "$TARGET"}
+        run: cargo packager -p oneclient_app --release -f ${{ matrix.formats }} ${TARGET:+--target "$TARGET"} --verbose
 
       - name: Collect artifacts
         shell: bash
