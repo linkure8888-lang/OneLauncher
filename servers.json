@@ -1,0 +1,15 @@
+{
+  "servers": [
+    {
+      "id": "remix-duels",
+      "name": "Remix Duels",
+      "summary": "1v1 duels, low ping for CIS, offline-mode friendly. Placeholder until our own node is up.",
+      "address": "play.remixclient.example",
+      "port": 25565,
+      "region": "RU",
+      "tags": ["pvp", "duels"],
+      "promoted": false,
+      "url": "https://t.me/remixclient_ru"
+    }
+  ]
+}

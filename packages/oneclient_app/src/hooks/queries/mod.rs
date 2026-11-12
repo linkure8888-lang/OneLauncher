@@ -29,6 +29,7 @@ mod package_updates;
 mod packages;
 mod player_profile;
 mod screenshots;
+mod servers;
 mod settings_profiles;
 mod skin;
 mod skins;
@@ -103,6 +104,7 @@ pub use screenshots::{
     ScreenshotAction, UseScreenshotAction, invalidate_screenshots_queries, try_cluster_screenshots,
     use_cluster_screenshots, use_local_image, use_screenshot_action, use_screenshot_folder_watch,
 };
+pub use servers::use_servers;
 pub use settings_profiles::{
     try_game_profile, use_cluster_profile, use_cluster_settings, use_game_profile,
     use_named_profiles,

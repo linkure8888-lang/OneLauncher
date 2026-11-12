@@ -88,9 +88,9 @@ pub use queries::{
     use_package_meta_batch, use_package_project, use_package_search, use_package_updates,
     use_package_versions_when, use_player_profile, use_player_skin, use_project_web_urls,
     use_provider_versions, use_refresh_account, use_refresh_all_accounts, use_remove_account,
-    use_screenshot_action, use_screenshot_folder_watch, use_set_default_account, use_shadowed_mods,
-    use_shared_groups, use_skin_library, use_storage_action, use_storage_report, use_terms,
-    use_upload_log, use_version_art, use_version_art_gallery, use_version_loaders,
+    use_screenshot_action, use_screenshot_folder_watch, use_servers, use_set_default_account,
+    use_shadowed_mods, use_shared_groups, use_skin_library, use_storage_action, use_storage_report,
+    use_terms, use_upload_log, use_version_art, use_version_art_gallery, use_version_loaders,
     use_version_metadata, use_versions, version_list, versions_metadata, versions_total,
 };
 pub use queries::{BisectAction, BisectMutation, use_bisect, use_bisect_mutation};

@@ -33,6 +33,8 @@ pub const TOS_URL: &str = "https://github.com/linkure8888-lang/OneLauncher/blob/
 pub const PRIVACY_URL: &str =
     "https://github.com/linkure8888-lang/OneLauncher/blob/main/docs/privacy.md";
 pub const PLUS_BACKEND_URL: &str = "https://plus.polyfrost.org";
+pub const SERVERS_URL: &str =
+    "https://raw.githubusercontent.com/linkure8888-lang/OneLauncher/main/servers.json";
 pub const CRASH_DATA_URL: &str =
     "https://raw.githubusercontent.com/Polyfrost/CrashData/refs/heads/main/crashes.json";
 
