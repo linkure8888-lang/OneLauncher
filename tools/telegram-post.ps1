@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Публикация новостей RemixClient в Telegram-канал через Bot API.
 
