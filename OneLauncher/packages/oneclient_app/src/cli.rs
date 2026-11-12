@@ -1,17 +1,60 @@
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub enum FriendsCommand {
+    List,
+    Add { nickname: String, uuid: String },
+    Remove { uuid: String },
+    #[default]
+    None,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Cli {
     pub launch: Option<String>,
     pub share: Option<String>,
     pub portable: bool,
+    pub friends_cmd: FriendsCommand,
 }
 
 impl Cli {
     fn from_args(args: impl IntoIterator<Item = String>) -> Self {
         let mut cli = Self::default();
-        let mut args = args.into_iter();
+        let mut args = args.into_iter().peekable();
 
         while let Some(arg) = args.next() {
-            if let Some(value) = arg.strip_prefix("--launch=") {
+            if arg == "friends" {
+                match args.next().as_deref() {
+                    Some("list") => {
+                        cli.friends_cmd = FriendsCommand::List;
+                    }
+                    Some("add") => {
+                        let nickname = args.next();
+                        let uuid = args.next();
+                        if let (Some(nick), Some(id)) = (nickname, uuid) {
+                            cli.friends_cmd = FriendsCommand::Add { nickname: nick, uuid: id };
+                        } else {
+                            eprintln!("Error: 'friends add' requires <nickname> and <uuid>");
+                            std::process::exit(1);
+                        }
+                    }
+                    Some("remove") => {
+                        let uuid = args.next();
+                        if let Some(id) = uuid {
+                            cli.friends_cmd = FriendsCommand::Remove { uuid: id };
+                        } else {
+                            eprintln!("Error: 'friends remove' requires <uuid>");
+                            std::process::exit(1);
+                        }
+                    }
+                    Some(other) => {
+                        eprintln!("Error: unknown friends subcommand '{}'. Use list, add, or remove.", other);
+                        std::process::exit(1);
+                    }
+                    None => {
+                        eprintln!("Error: expected subcommand for 'friends' (list, add, remove)");
+                        std::process::exit(1);
+                    }
+                }
+            } else if let Some(value) = arg.strip_prefix("--launch=") {
                 cli.launch = non_empty(value.to_string());
             } else if arg == "--launch" {
                 cli.launch = args.next().and_then(non_empty);

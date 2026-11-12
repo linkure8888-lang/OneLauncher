@@ -34,6 +34,7 @@ oneclient_macro = {path = "./packages/oneclient_macro"}
 oneclient_mc = {path = "./packages/oneclient_mc"}
 oneclient_net = {path = "./packages/oneclient_net"}
 oneclient_polyplus = {path = "./packages/oneclient_polyplus"}
+oneclient_social = {path = "./packages/oneclient_social"}
 polyio = {path = "./packages/polyio"}
 
 # core (extra)
@@ -155,10 +156,6 @@ freya-skia-safe = "=0.104.0" # draws the plusrenderer player model
 plusrenderer = {git = "https://github.com/Polyfrost/plusrenderer", rev = "914ddf8cae388126407d86925a05fa3db085ebbc"}
 image = {version = "=0.25.10", default-features = false, features = ["png", "jpeg", "ico"]}
 
-# Proc macros are dylibs rustc loads during the build, and stripping them with
-# packed debuginfo produces a LINKEDIT section that macOS 27's dyld refuses to
-# open. Build dependencies keep their symbols; the shipped binary is unaffected.
-# Screenshot thumbnails and gallery tiles decode in these, too slow unoptimized
 [profile.dev.package.image]
 opt-level = 3
 
@@ -183,9 +180,6 @@ split-debuginfo = "unpacked"
 strip = false
 
 [profile.release]
-# `lto = "fat"` makes link.exe die with STATUS_STACK_BUFFER_OVERRUN
-# (0xc0000409) on this project's size on Windows, both locally and in CI.
-# Thin LTO keeps almost all of the benefit and links reliably.
 codegen-units = 16
 debug = "line-tables-only"
 lto = "thin"
@@ -196,13 +190,11 @@ strip = true
 
 [profile.release-profiling]
 inherits = "release"
-
 debug = true
 strip = false
 
 [profile.release-fastprofiling]
 inherits = "release"
-
 codegen-units = 16
 debug = true
 lto = false
