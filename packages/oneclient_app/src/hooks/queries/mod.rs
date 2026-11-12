@@ -31,6 +31,7 @@ mod player_profile;
 mod screenshots;
 mod settings_profiles;
 mod skin;
+mod skins;
 mod state;
 mod storage;
 mod tos;
@@ -107,6 +108,7 @@ pub use settings_profiles::{
     use_named_profiles,
 };
 pub use skin::use_player_skin;
+pub use skins::{invalidate_skin_library, use_skin_library};
 pub use state::{query_error, query_is_busy, query_is_loading, settled_or_loading};
 pub use storage::{
     DiscardLeftoversKeys, DiscardLeftoversMutation, LeftoversQuery, StorageAction,
