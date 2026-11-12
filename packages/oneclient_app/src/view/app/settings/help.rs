@@ -142,6 +142,15 @@ fn report_card() -> impl IntoElement {
                         })
                         .child(Icon::new(IconType::Folder).size(16.))
                         .text(t("oneclient.settings.help.report.logs")),
+                )
+                .child(
+                    Button::new()
+                        .secondary()
+                        .on_press(|_| {
+                            crate::platform::open_url(oneclient_common::constants::SUPPORT_URL)
+                        })
+                        .child(Icon::new(IconType::Rocket02).size(16.))
+                        .text(t("oneclient.settings.help.report.support")),
                 ),
         )
         .child(

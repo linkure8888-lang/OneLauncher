@@ -157,6 +157,26 @@ Issues and pull requests are welcome. Good first contributions:
 
 Please run `cargo fmt` and `cargo clippy` before opening a PR, and keep the GPL headers and attribution intact.
 
+## Support the project
+
+RemixClient is free and stays free: no paid tiers, no locked accounts, no telemetry.
+Servers, builds, hosting and release signing cost money every month, so donations are
+what keep it going.
+
+- Telegram chat and news: https://t.me/remixclient_ru
+- Donations: **TODO** (Boosty / DonationAlerts / Telegram Stars link goes here)
+
+In the launcher the same link is behind *Settings → Help → Support the project*.
+
+### Advertising policy
+
+If a server or a build is ever promoted inside the launcher, it will be:
+
+1. **labelled** as a promotion, never disguised as an app feature;
+2. **non-blocking** - never on top of the play button or between a click and the game;
+3. **only for servers we would play on ourselves** - no pay-to-win shops, no scam
+   projects, no gambling. Money never buys a place in front of a better server.
+
 ## Legal & attribution
 
 - RemixClient is distributed under the **GNU General Public License v3.0 only**. See [LICENSE](LICENSE). Any distributed build must remain GPL-3.0 and include the corresponding source.

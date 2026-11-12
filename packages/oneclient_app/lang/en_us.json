@@ -2213,6 +2213,7 @@
   "oneclient.settings.help.report.body": "Open an issue on GitHub and attach the newest log from the logs folder. The launcher never sends anything automatically.",
   "oneclient.settings.help.report.github": "Open GitHub Issues",
   "oneclient.settings.help.report.telegram": "Telegram chat",
+  "oneclient.settings.help.report.support": "Support the project",
   "oneclient.settings.help.report.logs": "Open logs folder",
   "oneclient.settings.help.report.note": "Tip: attach the newest .log file and write what you did before the problem appeared.",
   "oneclient.settings.language.section.available": "AVAILABLE LANGUAGES",

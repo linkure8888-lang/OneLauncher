@@ -2213,6 +2213,7 @@
   "oneclient.settings.help.report.body": "Создайте issue на GitHub и прикрепите самый свежий лог из папки логов. Лаунчер ничего не отправляет автоматически.",
   "oneclient.settings.help.report.github": "Открыть GitHub Issues",
   "oneclient.settings.help.report.telegram": "Чат в Telegram",
+  "oneclient.settings.help.report.support": "Поддержать проект",
   "oneclient.settings.help.report.logs": "Открыть папку логов",
   "oneclient.settings.help.report.note": "Совет: прикрепите самый свежий .log и напишите, что вы делали перед проблемой.",
   "oneclient.settings.language.section.available": "ДОСТУПНЫЕ ЯЗЫКИ",

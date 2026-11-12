@@ -41,6 +41,10 @@ pub const CRASH_DATA_URL: &str =
 pub const TELEGRAM_URL: &str = "https://t.me/remixclient_ru";
 pub const DISCORD_URL: &str = TELEGRAM_URL;
 
+/// Where "support the project" points. Replace with a Boosty / DonationAlerts /
+/// Telegram Stars link once the account exists; the chat works today.
+pub const SUPPORT_URL: &str = TELEGRAM_URL;
+
 // Crash reports are opt-in and go to the maintainer's own project only. A
 // build without `REMIXCLIENT_SENTRY_DSN` sends nothing, so a fork never writes
 // into the upstream project's telemetry.
