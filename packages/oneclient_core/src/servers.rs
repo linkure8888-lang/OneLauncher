@@ -80,9 +80,9 @@ impl ServerList {
                 server.port = default_port();
             }
         }
-        // Sort so promoted servers are always at the top
-        self.servers
-            .sort_by(|a, b| b.is_promoted.cmp(&a.is_promoted));
+        // Promoted entries are only *labelled*, never pushed to the top: paid
+        // placement must not outrank a better server (see the ad policy in the
+        // README). Keep the order the list author wrote.
         self
     }
 }
