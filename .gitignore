@@ -1,2 +1,20 @@
-OneLauncher/companion/.gradle/
-OneLauncher/target/
+# Rust
+/target
+**/target/
+
+# Gradle / Java build output
+companion/.gradle/
+companion/build/
+*.class
+*.jar.tmp
+
+# Editors and OS
+.DS_Store
+.idea/
+*.iml
+Thumbs.db
+
+# Local secrets and scratch
+*.key
+*.pem
+.env
