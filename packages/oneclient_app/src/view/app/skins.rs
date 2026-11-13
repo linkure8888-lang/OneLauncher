@@ -14,7 +14,6 @@ use crate::theme::{colors, rounded, text_size};
 use crate::ui::border_all_color;
 
 const CARD_WIDTH: f32 = 190.;
-const PREVIEW_EDGE: u32 = 256;
 
 #[derive(PartialEq)]
 pub struct Skins;

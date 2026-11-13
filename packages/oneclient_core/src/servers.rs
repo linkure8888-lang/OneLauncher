@@ -11,10 +11,13 @@
 
 use std::time::{Duration, Instant};
 
-mod servers_analytics;
 mod custom_servers;
-pub use servers_analytics::{record_server_click, get_clicks_last_30_days, upload_analytics_stub, ServerClickRecord, ServerAnalyticsStore};
-pub use custom_servers::{load_custom_servers, save_custom_server, remove_custom_server};
+mod servers_analytics;
+pub use custom_servers::{load_custom_servers, remove_custom_server, save_custom_server};
+pub use servers_analytics::{
+    ServerAnalyticsStore, ServerClickRecord, get_clicks_last_30_days, record_server_click,
+    upload_analytics_stub,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -78,7 +81,8 @@ impl ServerList {
             }
         }
         // Sort so promoted servers are always at the top
-        self.servers.sort_by(|a, b| b.is_promoted.cmp(&a.is_promoted));
+        self.servers
+            .sort_by(|a, b| b.is_promoted.cmp(&a.is_promoted));
         self
     }
 }

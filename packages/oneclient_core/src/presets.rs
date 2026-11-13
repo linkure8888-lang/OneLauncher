@@ -16,7 +16,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-const MIN_RENDER_SCALE: f32 = 0.75;
 const MIN_MEMORY_MB: u64 = 2048;
 const MAX_MEMORY_MB: u64 = 16384;
 

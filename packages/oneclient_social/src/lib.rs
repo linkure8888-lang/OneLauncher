@@ -1,7 +1,7 @@
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use directories::ProjectDirs;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -22,8 +22,8 @@ pub struct Friend {
 }
 
 fn config_path() -> Result<PathBuf, SocialError> {
-    let proj_dirs = ProjectDirs::from("com", "remixclient", "oneclient")
-        .ok_or(SocialError::NoConfigDir)?;
+    let proj_dirs =
+        ProjectDirs::from("com", "remixclient", "oneclient").ok_or(SocialError::NoConfigDir)?;
     let dir = proj_dirs.config_dir();
     fs::create_dir_all(dir)?;
     Ok(dir.join("friends.json"))

@@ -159,7 +159,13 @@ impl Component for Servers {
                 };
 
                 rect()
-                    .position(Position::new_absolute().top(0.).left(0.).right(0.).bottom(0.))
+                    .position(
+                        Position::new_absolute()
+                            .top(0.)
+                            .left(0.)
+                            .right(0.)
+                            .bottom(0.),
+                    )
                     .layer(Layer::OverlayLevel(10))
                     .background(Color::BLACK.with_a(150))
                     .center()
@@ -219,10 +225,7 @@ impl Component for Servers {
                                             .font_size(text_size(12.))
                                             .color(colors::fg_secondary()),
                                     )
-                                    .child(
-                                        TextInput::new(port_input)
-                                            .placeholder("25565"),
-                                    ),
+                                    .child(TextInput::new(port_input).placeholder("25565")),
                             )
                             .child(
                                 rect()
@@ -392,10 +395,7 @@ impl Component for ServerRow {
                                 )
                             }))
                             .maybe_child(self.is_custom.then(|| {
-                                badge(
-                                    t("oneclient.servers.custom").to_string(),
-                                    colors::success(),
-                                )
+                                badge(t("oneclient.servers.custom").to_string(), colors::success())
                             })),
                     )
                     .child(

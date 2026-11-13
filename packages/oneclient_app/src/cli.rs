@@ -1,8 +1,13 @@
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum FriendsCommand {
     List,
-    Add { nickname: String, uuid: String },
-    Remove { uuid: String },
+    Add {
+        nickname: String,
+        uuid: String,
+    },
+    Remove {
+        uuid: String,
+    },
     #[default]
     None,
 }
@@ -30,7 +35,10 @@ impl Cli {
                         let nickname = args.next();
                         let uuid = args.next();
                         if let (Some(nick), Some(id)) = (nickname, uuid) {
-                            cli.friends_cmd = FriendsCommand::Add { nickname: nick, uuid: id };
+                            cli.friends_cmd = FriendsCommand::Add {
+                                nickname: nick,
+                                uuid: id,
+                            };
                         } else {
                             eprintln!("Error: 'friends add' requires <nickname> and <uuid>");
                             std::process::exit(1);
@@ -46,7 +54,10 @@ impl Cli {
                         }
                     }
                     Some(other) => {
-                        eprintln!("Error: unknown friends subcommand '{}'. Use list, add, or remove.", other);
+                        eprintln!(
+                            "Error: unknown friends subcommand '{}'. Use list, add, or remove.",
+                            other
+                        );
                         std::process::exit(1);
                     }
                     None => {

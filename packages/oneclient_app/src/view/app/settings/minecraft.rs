@@ -407,7 +407,7 @@ impl Component for HardwarePreset {
     fn render(&self) -> impl IntoElement {
         let hardware = crate::hooks::settled_or_loading(&crate::hooks::use_hardware());
         let dispatch = use_dispatch();
-        let mut busy = use_state(|| false);
+        let busy = use_state(|| false);
         let cluster_id = *crate::hooks::use_active_cluster_id().read();
 
         let Some(hardware) = hardware else {

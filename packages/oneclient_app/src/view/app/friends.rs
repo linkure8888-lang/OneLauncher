@@ -2,7 +2,7 @@ use freya::prelude::*;
 use oneclient_social::Friend;
 
 use crate::components::{Button, Icon, IconType, ScrollArea, TextInput};
-use crate::hooks::{use_dispatch};
+use crate::hooks::use_dispatch;
 use crate::i18n::t;
 use crate::theme::{colors, rounded, text_size};
 use crate::ui::border_all_color;
@@ -43,7 +43,11 @@ impl Component for Friends {
                         dispatch.notify(t("oneclient.friends.added")).send();
                     }
                     Err(err) => {
-                        dispatch.notify(t("oneclient.friends.error.add")).body(err.to_string()).error().send();
+                        dispatch
+                            .notify(t("oneclient.friends.error.add"))
+                            .body(err.to_string())
+                            .error()
+                            .send();
                     }
                 }
             }
@@ -113,21 +117,17 @@ impl Component for Friends {
                                     .width(Size::fill())
                                     .cross_align(Alignment::Center)
                                     .spacing(12.)
+                                    .child(rect().width(Size::flex(1.)).child(
+                                        TextInput::new(nickname_input).placeholder(t(
+                                            "oneclient.friends.nickname_placeholder",
+                                        )),
+                                    ))
                                     .child(
-                                        rect()
-                                            .width(Size::flex(1.))
-                                            .child(
-                                                TextInput::new(nickname_input)
-                                                    .placeholder(t("oneclient.friends.nickname_placeholder"))
-                                            ),
-                                    )
-                                    .child(
-                                        rect()
-                                            .width(Size::flex(1.))
-                                            .child(
-                                                TextInput::new(uuid_input)
-                                                    .placeholder(t("oneclient.friends.uuid_placeholder"))
-                                            ),
+                                        rect().width(Size::flex(1.)).child(
+                                            TextInput::new(uuid_input).placeholder(t(
+                                                "oneclient.friends.uuid_placeholder",
+                                            )),
+                                        ),
                                     )
                                     .child(
                                         Button::new()
@@ -201,15 +201,17 @@ impl Component for FriendRow {
         let uuid_val = entry.uuid.clone();
         let remove_action = {
             let dispatch = dispatch.clone();
-            move |_: Event<PressEventData>| {
-                match oneclient_social::remove_friend(&uuid_val) {
-                    Ok(()) => {
-                        on_removed();
-                        dispatch.notify(t("oneclient.friends.removed")).send();
-                    }
-                    Err(err) => {
-                        dispatch.notify(t("oneclient.friends.error.remove")).body(err.to_string()).error().send();
-                    }
+            move |_: Event<PressEventData>| match oneclient_social::remove_friend(&uuid_val) {
+                Ok(()) => {
+                    on_removed();
+                    dispatch.notify(t("oneclient.friends.removed")).send();
+                }
+                Err(err) => {
+                    dispatch
+                        .notify(t("oneclient.friends.error.remove"))
+                        .body(err.to_string())
+                        .error()
+                        .send();
                 }
             }
         };
@@ -244,7 +246,11 @@ impl Component for FriendRow {
                     )
                     .child(
                         label()
-                            .text(format!("{}: {}", t("oneclient.friends.last_seen"), formatted_time))
+                            .text(format!(
+                                "{}: {}",
+                                t("oneclient.friends.last_seen"),
+                                formatted_time
+                            ))
                             .font_size(text_size(11.))
                             .color(colors::fg_secondary().with_a(180)),
                     ),

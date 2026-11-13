@@ -149,7 +149,10 @@ fn main() {
                 Ok(friends) => {
                     println!("=== Local Friends ({}) ===", friends.len());
                     for f in friends {
-                        println!("- {} (UUID: {}, Last Seen: {})", f.nickname, f.uuid, f.last_seen);
+                        println!(
+                            "- {} (UUID: {}, Last Seen: {})",
+                            f.nickname, f.uuid, f.last_seen
+                        );
                     }
                 }
                 Err(e) => eprintln!("Error loading friends: {}", e),

@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use oneclient_common::paths;
 use crate::servers::ServerEntry;
+use oneclient_common::paths;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 const CUSTOM_SERVERS_FILE: &str = "servers_custom.json";
 
@@ -12,7 +12,9 @@ pub struct CustomServerStore {
 }
 
 fn custom_servers_path() -> Option<PathBuf> {
-    paths::config_dir().ok().map(|dir| dir.join(CUSTOM_SERVERS_FILE))
+    paths::config_dir()
+        .ok()
+        .map(|dir| dir.join(CUSTOM_SERVERS_FILE))
 }
 
 pub async fn load_custom_servers() -> Vec<ServerEntry> {

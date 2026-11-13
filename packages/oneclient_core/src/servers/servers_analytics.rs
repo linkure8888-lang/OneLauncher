@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 use oneclient_common::paths;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 const ANALYTICS_FILE: &str = "analytics.json";
 
@@ -47,7 +47,8 @@ pub async fn get_clicks_last_30_days(server_id: &str) -> usize {
     let store = load_store(&path).await;
     let cutoff = (Utc::now() - Duration::days(30)).timestamp();
 
-    store.clicks
+    store
+        .clicks
         .iter()
         .filter(|c| c.server_id == server_id && c.timestamp >= cutoff)
         .count()
@@ -58,7 +59,9 @@ pub async fn upload_analytics_stub() -> crate::LauncherResult<()> {
         return Ok(());
     };
     let _store = load_store(&path).await;
-    tracing::info!("Analytics upload stub: local stats successfully saved and prepared for upload.");
+    tracing::info!(
+        "Analytics upload stub: local stats successfully saved and prepared for upload."
+    );
     Ok(())
 }
 
