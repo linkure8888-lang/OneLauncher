@@ -9,6 +9,7 @@
 //! labelled, must not block the UI, and must be a server we would play on
 //! ourselves - no pay-to-win shops, no gambling, no scams.
 
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 mod custom_servers;
@@ -57,6 +58,60 @@ fn default_port() -> u16 {
     25565
 }
 
+/// Sanitizes a single entry in place. Returns `false` when the entry is unusable
+/// and must be dropped (empty id / name / address).
+///
+/// Trims every text field, restores a zero port to the default, and keeps only
+/// `http`/`https` sponsor URLs (anything else, including `javascript:`, becomes
+/// `None`).
+pub fn sanitize_server_entry(entry: &mut ServerEntry) -> bool {
+    let id = entry.id.trim();
+    if id.is_empty() {
+        return false;
+    }
+    entry.id = id.to_string();
+
+    let name = entry.name.trim();
+    if name.is_empty() {
+        return false;
+    }
+    entry.name = name.to_string();
+
+    let address = entry.address.trim();
+    if address.is_empty() {
+        return false;
+    }
+    entry.address = address.to_string();
+
+    entry.summary = entry.summary.trim().to_string();
+    entry.region = entry.region.trim().to_string();
+
+    if entry.port == 0 {
+        entry.port = default_port();
+    }
+
+    match &entry.sponsor_url {
+        None => {}
+        Some(url) => {
+            let trimmed = url.trim();
+            if trimmed.is_empty() {
+                entry.sponsor_url = None;
+            } else if is_http_url(trimmed) {
+                entry.sponsor_url = Some(trimmed.to_string());
+            } else {
+                entry.sponsor_url = None;
+            }
+        }
+    }
+
+    true
+}
+
+fn is_http_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerList {
     #[serde(default)]
@@ -68,18 +123,19 @@ impl ServerList {
     /// entry must never take the whole screen down.
     #[must_use]
     pub fn sanitized(mut self) -> Self {
-        self.servers.retain(|server| {
-            !server.id.trim().is_empty()
-                && !server.name.trim().is_empty()
-                && !server.address.trim().is_empty()
-        });
-        for server in &mut self.servers {
-            server.name = server.name.trim().to_string();
-            server.address = server.address.trim().to_string();
-            if server.port == 0 {
-                server.port = default_port();
+        let mut seen = HashSet::new();
+        let mut out = Vec::with_capacity(self.servers.len());
+        for mut server in self.servers.drain(..) {
+            if !sanitize_server_entry(&mut server) {
+                continue;
             }
+            // First entry with a given id wins; later duplicates are dropped.
+            if !seen.insert(server.id.clone()) {
+                continue;
+            }
+            out.push(server);
         }
+        self.servers = out;
         // Promoted entries are only *labelled*, never pushed to the top: paid
         // placement must not outrank a better server (see the ad policy in the
         // README). Keep the order the list author wrote.
@@ -113,13 +169,22 @@ pub async fn fetch_servers(net: &RequestClient) -> LauncherResult<ServerList> {
     if fetched.bytes.len() > DOWNLOAD_CAP {
         tracing::warn!(
             bytes = fetched.bytes.len(),
-            "server list is over the size cap, keeping the cached one"
+            "server list is over the size cap, discarding the response"
         );
+        // fetch_cached already persisted the oversized body, so drop it from
+        // disk instead of trusting it. The error is ignored on purpose.
+        let _ = tokio::fs::remove_file(&path).await;
         return Ok(read_cached(&path).await.unwrap_or_default());
     }
 
     match serde_json::from_slice::<ServerList>(&fetched.bytes) {
-        Ok(list) => Ok(list.sanitized()),
+        Ok(list) => {
+            let list = list.sanitized();
+            if let Some(etag) = &fetched.etag {
+                oneclient_net::commit_etag(&path, etag).await;
+            }
+            Ok(list)
+        }
         Err(err) => {
             tracing::warn!("server list is not valid json: {err}");
             Ok(read_cached(&path).await.unwrap_or_default())
@@ -139,12 +204,22 @@ async fn read_cached(path: &std::path::Path) -> Option<ServerList> {
 /// This is not a Minecraft ping (no status packet), it only answers "is the
 /// host alive and how far is it", which is enough for the list.
 pub async fn ping(entry: &ServerEntry) -> Option<u32> {
-    let target = format!("{}:{}", entry.address, entry.port);
     let started = Instant::now();
-    match tokio::time::timeout(PING_TIMEOUT, tokio::net::TcpStream::connect(&target)).await {
+    match tokio::time::timeout(
+        PING_TIMEOUT,
+        tokio::net::TcpStream::connect((entry.address.as_str(), entry.port)),
+    )
+    .await
+    {
         Ok(Ok(_)) => Some(started.elapsed().as_millis().min(u32::MAX as u128) as u32),
         _ => None,
     }
+}
+
+/// The `(host, port)` pair handed to `TcpStream::connect`. Kept as a function so
+/// tests can check IPv6 literals and host:port input without opening a socket.
+fn connection_target(entry: &ServerEntry) -> (&str, u16) {
+    (entry.address.as_str(), entry.port)
 }
 
 #[cfg(test)]
@@ -212,5 +287,59 @@ mod tests {
         assert_eq!(list.servers.len(), 1);
         assert_eq!(list.servers[0].port, 25565);
         assert_eq!(list.servers[0].tags, vec!["pvp".to_string()]);
+    }
+
+    #[test]
+    fn duplicate_ids_are_dropped_first_wins() {
+        let list = ServerList {
+            servers: vec![
+                entry("dup", "First", "a.example.com", 25565),
+                entry("dup", "Second", "b.example.com", 25565),
+            ],
+        }
+        .sanitized();
+
+        assert_eq!(list.servers.len(), 1);
+        assert_eq!(list.servers[0].name, "First");
+        assert_eq!(list.servers[0].address, "a.example.com");
+    }
+
+    #[test]
+    fn javascript_sponsor_url_is_dropped() {
+        let mut e = entry("x", "X", "play.example.com", 25565);
+        e.sponsor_url = Some("javascript:alert(1)".to_string());
+        let list = ServerList { servers: vec![e] }.sanitized();
+
+        assert_eq!(list.servers.len(), 1);
+        assert_eq!(list.servers[0].sponsor_url, None);
+    }
+
+    #[test]
+    fn http_and_https_sponsor_urls_are_kept() {
+        let mut e = entry("x", "X", "play.example.com", 25565);
+        e.sponsor_url = Some("  https://example.com/path  ".to_string());
+        let list = ServerList { servers: vec![e] }.sanitized();
+
+        assert_eq!(
+            list.servers[0].sponsor_url,
+            Some("https://example.com/path".to_string())
+        );
+    }
+
+    #[test]
+    fn ids_are_trimmed() {
+        let list = ServerList {
+            servers: vec![entry("  spaced  ", "X", "play.example.com", 25565)],
+        }
+        .sanitized();
+
+        assert_eq!(list.servers[0].id, "spaced");
+    }
+
+    #[test]
+    fn ipv6_address_gives_a_correct_connect_target() {
+        let e = entry("x", "X", "::1", 25565);
+        assert_eq!(connection_target(&e), ("::1", 25565));
+        assert_eq!(connection_target(&e), ("::1", 25565));
     }
 }
