@@ -1,12 +1,14 @@
-tasks.register('cleanloom') {
-    doLast {
-        delete file(".gradle/loom-cache")
-    }
-}
 
 plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
+}
+
+
+tasks.register('cleanloom') {
+    doLast {
+        delete file(".gradle/loom-cache")
+    }
 }
 
 version = project.mod_version
