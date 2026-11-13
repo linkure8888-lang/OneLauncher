@@ -1,9 +1,0 @@
-/target
-.DS_Store
-/.idea
-OneLauncher.iml
-
-/packages/oneclient_app/icons/generated/
-
-# standalone tool crates
-tools/skinpack/target/
