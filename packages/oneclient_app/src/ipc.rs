@@ -382,6 +382,7 @@ mod tests {
                 launch: Some("pack".into()),
                 share: None,
                 portable: false,
+                friends_cmd: crate::cli::FriendsCommand::None,
             }),
             IpcCommand::Launch("pack".into()),
         );
@@ -393,6 +394,7 @@ mod tests {
             launch: None,
             share: Some("ABCDEFGH".into()),
             portable: false,
+            friends_cmd: crate::cli::FriendsCommand::None,
         });
         assert_eq!(command, IpcCommand::ImportShare("ABCDEFGH".into()));
         assert_eq!(IpcCommand::decode(&command.encode()), Some(command));

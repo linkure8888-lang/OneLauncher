@@ -930,9 +930,8 @@ async fn report_crash(
         tracing::debug!(
             cluster_id = cluster.id,
             suggestions = fixes.len(),
-            "no recognised cause, leaving it to the toast"
+            "no recognised cause; showing the generic crash dialog with a logs shortcut"
         );
-        return;
     }
 
     let mod_issues = match diagnosis {

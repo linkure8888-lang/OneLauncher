@@ -41,6 +41,7 @@ pub struct ModpackInstallReport {
     pub disabled_duplicates: Vec<String>,
     pub disabled_hashes: Vec<String>,
     pub wanted_present: Vec<WantedFile>,
+    pub world_backups: usize,
     pub notices: Vec<String>,
 }
 
@@ -65,6 +66,7 @@ impl ModpackInstallReport {
             }
         }
         self.wanted_present = later.wanted_present;
+        self.world_backups += later.world_backups;
         self.notices.extend(later.notices);
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use freya::prelude::*;
 use freya::router::*;
@@ -653,12 +653,14 @@ fn actions(crash: &GameCrash, dispatch: crate::Actions) -> impl IntoElement {
     let cluster_id = crash.cluster_id;
     let close = dispatch.clone();
 
+    let report = crash_report_text(crash);
     let mut row = rect()
         .horizontal()
         .width(Size::fill())
         .main_align(Alignment::End)
         .cross_align(Alignment::Center)
         .spacing(10.)
+        .child(copy_report_button(report, dispatch.clone()))
         .child(logs_button(cluster_id, dispatch.clone()));
 
     if let Some(remedy) = crash.remedy {
@@ -671,6 +673,79 @@ fn actions(crash: &GameCrash, dispatch: crate::Actions) -> impl IntoElement {
             .on_press(move |_| close.dismiss_game_crash(cluster_id))
             .text(t("oneclient.common.close")),
     )
+}
+
+fn copy_report_button(report: String, dispatch: crate::Actions) -> Button {
+    Button::new()
+        .secondary()
+        .on_press(move |_| {
+            if let Err(err) = freya::text_edit::Clipboard::set(report.clone()) {
+                tracing::warn!("crash summary copy failed: {err:?}");
+                dispatch
+                    .notify(t("oneclient.components.button.copy_failed.title"))
+                    .body(t("oneclient.components.button.copy_failed.body"))
+                    .error()
+                    .toast_only()
+                    .send();
+            } else {
+                dispatch
+                    .notify(t("oneclient.components.button.copied"))
+                    .body(t("oneclient.components.crash_dialog.report.copied"))
+                    .info()
+                    .icon(IconType::ClipboardCheck)
+                    .toast_only()
+                    .send();
+            }
+        })
+        .child(Icon::new(IconType::Copy01).size(14.))
+        .text(t("oneclient.components.crash_dialog.copy_report"))
+}
+
+fn redact_user_paths(text: &str) -> String {
+    static USER_PATH: OnceLock<regex::Regex> = OnceLock::new();
+    USER_PATH
+        .get_or_init(|| {
+            regex::Regex::new(
+                r#"(?i)(?:\"[a-z]:[\\/](?:users|documents and settings)[\\/][^\"]*\"|'[a-z]:[\\/](?:users|documents and settings)[\\/][^']*'|[a-z]:[\\/](?:users|documents and settings)[\\/][^\\/:\"'<>]+(?:[\\/][^\s\"'<>]*)?|\"/(?:home|users)/[^\"]*\"|'/(?:home|users)/[^']*'|/(?:home|users)/[^/\"'<>]+(?:/[^\s\"'<>]*)?)"#,
+            )
+            .expect("the user-path redaction pattern is valid")
+        })
+        .replace_all(text, "<user-path>")
+        .into_owned()
+}
+
+fn crash_report_text(crash: &GameCrash) -> String {
+    let mut lines = vec![
+        t("oneclient.components.crash_dialog.report.title").to_string(),
+        redact_user_paths(&crash.title),
+    ];
+    if !crash.exit.is_empty() {
+        lines.push(format!(
+            "{}: {}",
+            t("oneclient.components.crash_dialog.report.exit"),
+            redact_user_paths(&crash.exit)
+        ));
+    }
+    if let Some(cause) = &crash.cause {
+        lines.push(format!(
+            "{}: {}",
+            t("oneclient.components.crash_dialog.report.cause"),
+            redact_user_paths(cause)
+        ));
+    }
+    if !crash.suspects.is_empty() {
+        lines.push(format!(
+            "{}: {}",
+            t("oneclient.components.crash_dialog.report.suspects"),
+            redact_user_paths(&crash.suspects.join(", "))
+        ));
+    }
+    lines.push(format!(
+        "{}: {}",
+        t("oneclient.components.crash_dialog.report.instance"),
+        redact_user_paths(&crash.cluster_name)
+    ));
+    lines.join("\n")
 }
 
 fn logs_button(cluster_id: i64, dispatch: crate::Actions) -> impl IntoElement {
@@ -742,6 +817,32 @@ mod tests {
             text: text.to_string(),
             kind: "Solution".to_string(),
         }
+    }
+
+    #[test]
+    fn the_copyable_crash_summary_includes_diagnosis_without_raw_logs_or_paths() {
+        let mut crash = crash();
+        crash.cause =
+            Some("Out of memory in C:\\Users\\player\\.minecraft\\mods\\bad.jar".to_string());
+        crash.exit = "error in /home/player/.minecraft/logs/latest.log".to_string();
+        crash.suspects = vec!["Example Mod".to_string()];
+        crash.game_dir = Some("C:/Users/player/.minecraft".to_string());
+
+        let report = crash_report_text(&crash);
+
+        assert!(report.contains("Out of memory"));
+        assert!(report.contains("Example Mod"));
+        assert!(report.contains("Skyblock"));
+        assert!(!report.contains(".minecraft"));
+        assert!(!report.contains("/home/player"));
+        assert!(report.contains("<user-path>"));
+
+        crash.cause = Some(
+            r#"Failed at "C:\Users\Player Name\.minecraft\logs\latest.log" and /home/Player Name/.minecraft/logs/latest.log"#.to_string(),
+        );
+        let report = crash_report_text(&crash);
+        assert!(!report.contains("Player Name"));
+        assert!(!report.contains(".minecraft"));
     }
 
     #[test]

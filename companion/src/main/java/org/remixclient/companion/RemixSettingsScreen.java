@@ -17,7 +17,7 @@ import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
 /**
- * The Right Shift settings screen: one dark panel with the three HUD toggles, the scale and
+ * The Right Alt settings screen: one dark panel with the three HUD toggles, the scale and
  * opacity sliders and a reset button.
  *
  * <p>The widgets are drawn by hand instead of using vanilla {@code Button}/{@code AbstractSliderButton}

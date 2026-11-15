@@ -417,7 +417,27 @@ pub async fn update_modpack_cluster(
         .into());
     }
 
-    let report = modpacks::install_modpack(
+    let backup_retention = state.settings.read().world_backup_retention.max(1) as usize;
+    let backups =
+        crate::game::world_backup::backup_before_modpack_change(&cluster, backup_retention).await;
+    if !backups.failures.is_empty() {
+        return Err(ContentError::InvalidData {
+            reason: format!(
+                "Modpack update cancelled because some worlds could not be backed up: {}",
+                backups.failures.join("; ")
+            ),
+        }
+        .into());
+    }
+    if !backups.created.is_empty() {
+        tracing::info!(
+            cluster_id,
+            count = backups.created.len(),
+            "world backups created before modpack update"
+        );
+    }
+
+    let mut report = modpacks::install_modpack(
         &archive_path,
         &manifest,
         cluster_id,
@@ -426,6 +446,7 @@ pub async fn update_modpack_cluster(
         &content,
     )
     .await?;
+    report.world_backups = backups.created.len();
 
     let keeps_newer_loader = match (&manifest.loader_version, &cluster.mc_loader_version) {
         (Some(version), Some(current)) => {

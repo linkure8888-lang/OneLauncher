@@ -19,6 +19,7 @@ const LEVEL_DAT: &str = "level.dat";
 const SESSION_LOCK: &str = "session.lock";
 const STATE_FILE: &str = "state.json";
 const TEMP_PREFIX: &str = ".tmp-";
+const RESTORE_TEMP_PREFIX: &str = ".remix-restore-";
 
 /// A world backup can be large; never make the player wait forever before a
 /// launch. The partial archive is removed by the next backup.
@@ -221,10 +222,28 @@ async fn cleanup_temp(dir: &Path) {
     }
 }
 
+async fn cleanup_restore_temp(parent: &Path) {
+    let Ok(mut entries) = tokio::fs::read_dir(parent).await else {
+        return;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(RESTORE_TEMP_PREFIX)
+        {
+            let _ = tokio::fs::remove_dir_all(entry.path()).await;
+            let _ = tokio::fs::remove_file(entry.path()).await;
+        }
+    }
+}
+
 async fn list_backups_at(dir: &Path, world: &str) -> WorldBackupResult<Vec<WorldBackupInfo>> {
     let mut out = Vec::new();
-    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
-        return Ok(out);
+    let mut entries = match tokio::fs::read_dir(dir).await {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+        Err(err) => return Err(err.into()),
     };
 
     while let Some(entry) = entries.next_entry().await? {
@@ -357,18 +376,53 @@ pub async fn backup_worlds(
         }
     };
 
-    let Ok(mut entries) = tokio::fs::read_dir(&saves).await else {
-        return report;
+    let mut entries = match tokio::fs::read_dir(&saves).await {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return report,
+        Err(err) => {
+            report
+                .failures
+                .push(format!("could not read worlds folder: {err}"));
+            return report;
+        }
     };
 
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let Ok(file_type) = entry.file_type().await else {
-            continue;
+    loop {
+        let entry = match entries.next_entry().await {
+            Ok(Some(entry)) => entry,
+            Ok(None) => break,
+            Err(err) => {
+                report
+                    .failures
+                    .push(format!("could not list worlds: {err}"));
+                break;
+            }
         };
-        if !file_type.is_dir() || !entry.path().join(LEVEL_DAT).is_file() {
+        let file_type = match entry.file_type().await {
+            Ok(file_type) => file_type,
+            Err(err) => {
+                report.failures.push(format!(
+                    "could not inspect {}: {err}",
+                    entry.file_name().to_string_lossy()
+                ));
+                continue;
+            }
+        };
+        if !file_type.is_dir() {
             continue;
         }
         let world = entry.file_name().to_string_lossy().to_string();
+        match tokio::fs::metadata(entry.path().join(LEVEL_DAT)).await {
+            Ok(meta) if meta.is_file() => {}
+            Ok(_) => continue,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                report
+                    .failures
+                    .push(format!("{world}: could not inspect level.dat: {err}"));
+                continue;
+            }
+        }
         let backups = match world_backups_dir(cluster, &world) {
             Ok(dir) => dir,
             Err(err) => {
@@ -416,6 +470,17 @@ pub async fn restore_world_backup(
     restore_at(&world_dir, &backups, world_name, file_name).await
 }
 
+async fn preserve_world_before_restore(
+    world_dir: &Path,
+    backups: &Path,
+    world: &str,
+) -> WorldBackupResult<()> {
+    if world_dir.is_dir() {
+        backup_at(world_dir, backups, world, "before-restore", 10, false).await?;
+    }
+    Ok(())
+}
+
 async fn restore_at(
     world_dir: &Path,
     backups: &Path,
@@ -432,13 +497,17 @@ async fn restore_at(
         return Err(WorldBackupError::NotFound(file_name.to_string()));
     }
 
-    // Keep the current state before touching it.
-    if world_dir.is_dir() {
-        let _ = backup_at(world_dir, backups, world, "before-restore", 10, false).await;
-    }
-
+    let parent = world_dir
+        .parent()
+        .ok_or_else(|| WorldBackupError::InvalidName(world.to_string()))?;
+    tokio::fs::create_dir_all(parent).await?;
+    cleanup_restore_temp(parent).await;
     tokio::fs::create_dir_all(backups).await?;
-    let temp = backups.join(format!(".restore-{}-{}.tmp", stamp(), std::process::id()));
+    let temp = parent.join(format!(
+        "{RESTORE_TEMP_PREFIX}{}-{}.tmp",
+        stamp(),
+        std::process::id()
+    ));
     let _ = tokio::fs::remove_dir_all(&temp).await;
 
     if let Err(err) = polyio::extract_zip(&backup_path, &temp).await {
@@ -452,6 +521,12 @@ async fn restore_at(
         ));
     }
 
+    // Extract first so the safety snapshot's retention pruning cannot delete
+    // the selected archive before it is restored.
+    if let Err(err) = preserve_world_before_restore(world_dir, backups, world).await {
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+        return Err(err);
+    }
     let previous = backups.join(format!(".previous-{}-{}.tmp", stamp(), std::process::id()));
     let _ = tokio::fs::remove_dir_all(&previous).await;
     if world_dir.is_dir() {
@@ -476,12 +551,15 @@ async fn restore_at(
     }
 }
 
-/// Called by the launch path. A backup failure never blocks the launch; the
-/// caller reports it.
-pub async fn backup_before_launch(cluster: &Cluster, retention: usize) -> WorldBackupReport {
+async fn backup_worlds_with_timeout(
+    cluster: &Cluster,
+    reason: &str,
+    retention: usize,
+    skip_unchanged: bool,
+) -> WorldBackupReport {
     match tokio::time::timeout(
         BACKUP_TIMEOUT,
-        backup_worlds(cluster, "before-launch", retention.max(1), true),
+        backup_worlds(cluster, reason, retention.max(1), skip_unchanged),
     )
     .await
     {
@@ -491,6 +569,20 @@ pub async fn backup_before_launch(cluster: &Cluster, retention: usize) -> WorldB
             ..WorldBackupReport::default()
         },
     }
+}
+
+/// Called by the launch path. A backup failure never blocks the launch; the
+/// caller reports it.
+pub async fn backup_before_launch(cluster: &Cluster, retention: usize) -> WorldBackupReport {
+    backup_worlds_with_timeout(cluster, "before-launch", retention, true).await
+}
+
+/// Creates a bounded safety snapshot before changing a modpack in an instance.
+pub async fn backup_before_modpack_change(
+    cluster: &Cluster,
+    retention: usize,
+) -> WorldBackupReport {
+    backup_worlds_with_timeout(cluster, "before-modpack-change", retention, false).await
 }
 
 #[cfg(test)]
@@ -552,6 +644,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_failed_safety_backup_blocks_restore_without_changing_the_world() {
+        let root = temp_root();
+        let world = root.join("saves/World");
+        seed_world(&world, b"keep me").await;
+
+        let blocker = root.join("not-a-directory");
+        tokio::fs::write(&blocker, b"file").await.unwrap();
+        let backups = blocker.join("backups");
+
+        assert!(
+            preserve_world_before_restore(&world, &backups, "World")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            tokio::fs::read(world.join("region/r.0.0.mca"))
+                .await
+                .unwrap(),
+            b"keep me"
+        );
+
+        let _ = tokio::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn restoring_an_old_snapshot_survives_safety_backup_pruning() {
+        let root = temp_root();
+        let world = root.join("saves/World");
+        let backups = root.join("backups/worlds/World");
+        seed_world(&world, b"oldest").await;
+        let oldest = backup_at(&world, &backups, "World", "test", 20, false)
+            .await
+            .unwrap()
+            .expect("the original world should be saved");
+
+        for index in 0..10 {
+            tokio::fs::write(
+                world.join("region/r.0.0.mca"),
+                format!("newer-{index}").as_bytes(),
+            )
+            .await
+            .unwrap();
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            backup_at(&world, &backups, "World", "test", 20, false)
+                .await
+                .unwrap()
+                .expect("a changed world should be saved");
+        }
+
+        restore_at(&world, &backups, "World", &oldest.file_name)
+            .await
+            .unwrap();
+        assert_eq!(
+            tokio::fs::read(world.join("region/r.0.0.mca"))
+                .await
+                .unwrap(),
+            b"oldest"
+        );
+
+        let _ = tokio::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
     async fn an_unchanged_world_is_skipped() {
         let root = temp_root();
         let world = root.join("saves/World");
@@ -570,6 +725,21 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+
+        let _ = tokio::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn a_missing_backup_folder_is_empty_but_a_folder_read_error_is_reported() {
+        let root = temp_root();
+        let missing = root.join("missing");
+        assert!(list_backups_at(&missing, "World").await.unwrap().is_empty());
+
+        let not_a_folder = root.join("file");
+        tokio::fs::write(&not_a_folder, b"not a directory")
+            .await
+            .unwrap();
+        assert!(list_backups_at(&not_a_folder, "World").await.is_err());
 
         let _ = tokio::fs::remove_dir_all(root);
     }

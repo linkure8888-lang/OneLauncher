@@ -1,6 +1,6 @@
 [package]
 name = "oneclient_social"
-version = "2.11.3"
+version = "2.11.4"
 edition.workspace = true
 authors.workspace = true
 

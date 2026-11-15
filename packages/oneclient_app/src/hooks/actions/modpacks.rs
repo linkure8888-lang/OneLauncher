@@ -784,6 +784,17 @@ impl Actions {
                     events.signal(oneclient_events::Signal::ClustersChanged);
                     crate::hooks::invalidate_cluster_queries().await;
                     notify_outcome(&actions, &job, &cluster.name, &report);
+                    if report.world_backups > 0 {
+                        let count = report.world_backups;
+                        actions
+                            .notify(t("oneclient.actions.modpacks.world_backups.title"))
+                            .body(tf(
+                                "oneclient.actions.modpacks.world_backups.body",
+                                &[&count],
+                            ))
+                            .info()
+                            .send();
+                    }
 
                     let opens_page = matches!(job, ModpackJob::Install(_));
                     let bundle_name = match &job {

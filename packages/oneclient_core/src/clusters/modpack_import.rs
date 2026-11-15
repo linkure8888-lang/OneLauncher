@@ -241,6 +241,15 @@ pub async fn import_modpack_into_cluster(
         wanted: previous.map(|pack| pack.wanted.clone()).unwrap_or_default(),
         skipped: skipped.iter().cloned().collect(),
     };
+    let backup_retention = state.settings.read().world_backup_retention.max(1) as usize;
+    let backups =
+        crate::game::world_backup::backup_before_modpack_change(&cluster, backup_retention).await;
+    if !backups.failures.is_empty() {
+        return Err(invalid(format!(
+            "Modpack change cancelled because some worlds could not be backed up: {}",
+            backups.failures.join("; ")
+        )));
+    }
     save_imported(&cluster, &entry).await?;
 
     apply_flagged_choices(import, previous, bundle_name, skipped, &content).await?;
@@ -294,6 +303,7 @@ pub async fn import_modpack_into_cluster(
             return Err(err.into());
         }
     };
+    report.world_backups = backups.created.len();
     record_install(&mut entry, &report, &stuck);
     save_imported(&cluster, &entry).await?;
 
