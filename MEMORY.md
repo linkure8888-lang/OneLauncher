@@ -54,6 +54,29 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 - Discord RPC only works while the Discord desktop client is running and logged in.
   There is no server component.
 
+## Release procedure (verified 2026-11-15)
+
+Pushing a tag does **not** start the Release workflow on this fork: commits and tags
+since 2026-11-11 get zero check-runs. Dispatch it explicitly instead. The Windows
+Credential Manager stores a PAT with `repo` + `workflow` scopes, so
+`git credential fill` yields it without any manual step:
+
+```bash
+TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')
+curl -s -X POST \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/linkure8888-lang/OneLauncher/actions/workflows/release.yml/dispatches \
+  -d '{"ref":"main","inputs":{"tag":"v2.11.4"}}'
+```
+
+Then bump `version` in the root `Cargo.toml` (and `oneclient_social`), commit, push,
+create the tag, push it, and dispatch. A full run takes ~25 min and now builds four
+platforms: Windows NSIS, Linux tarball, macOS arm64 dmg, macOS Intel dmg.
+
+Known gaps in the updater manifest (`latest.json`): Linux has no entry because the
+tarball is not signed by cargo-packager, and macOS builds are not Apple-notarised,
+so Gatekeeper warns on first launch.
+
 ## Build and test
 
 Run commands through the MSVC wrapper so `link.exe` resolves to Visual Studio:
