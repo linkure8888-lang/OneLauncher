@@ -54,6 +54,21 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 - Discord RPC only works while the Discord desktop client is running and logged in.
   There is no server component.
 
+## Telegram
+
+- Channel: `@remixclient_ru` (`RemixClient`, id `-1004487205418`). Bot: `@remix_client_bot`
+  (id `9106394088`), administrator with post / edit / delete / pin / change-info.
+- The bot token lives in `.env` in the repo root as `tg-token=...` (gitignored). The
+  posting script reads `.env` first, then `REMIX_TG_TOKEN`, then
+  `%USERPROFILE%\.remix\tg-token.txt`, and refuses to post anywhere except the
+  channel unless `-AllowAnyChat` is passed.
+- Channel avatar: `design/channel-avatar.png` — the white R from
+  `packages/oneclient_app/icons/512x512.png` on a full-bleed violet→cyan gradient,
+  so the circular crop has no dead margin. Generator lives in
+  `%TEMP%\remix-avatar` (Rust + `image`); regenerate with
+  `remix-avatar <icons/512x512.png> <out.png> 0.60`.
+- Channel description is set through the Bot API, not by hand.
+
 ## Release procedure (verified 2026-11-15)
 
 Pushing a tag does **not** start the Release workflow on this fork: commits and tags
