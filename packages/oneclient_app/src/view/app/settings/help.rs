@@ -1,6 +1,6 @@
 use freya::prelude::*;
 
-use super::{section_header, settings_page};
+use super::{section_header, settings_page, settings_row};
 use crate::components::{Button, Icon, IconType};
 use crate::i18n::t;
 use crate::theme::{colors, rounded, text_size};
@@ -52,6 +52,8 @@ impl Component for SettingsHelp {
             ))
             .child(section_header(t("oneclient.settings.help.section.report")))
             .child(report_card())
+            .child(section_header(t("oneclient.settings.help.section.support")))
+            .child(donate_row())
             .into_element()
     }
 }
@@ -86,6 +88,20 @@ fn feature(icon: IconType, title: &'static str, body: &'static str) -> impl Into
                 ),
         )
         .into_element()
+}
+
+/// A small, quiet row: the launcher is free, a donation is only a thank-you.
+fn donate_row() -> impl IntoElement {
+    settings_row(
+        IconType::IconLogo,
+        t("oneclient.settings.help.donate.title"),
+        t("oneclient.settings.help.donate.body"),
+        Button::new()
+            .secondary()
+            .on_press(|_| crate::platform::open_url(oneclient_common::constants::DONATE_URL))
+            .child(Icon::new(IconType::Rocket02).size(16.))
+            .text(t("oneclient.settings.help.donate.button")),
+    )
 }
 
 fn report_card() -> impl IntoElement {

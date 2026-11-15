@@ -47,6 +47,10 @@ pub const DISCORD_URL: &str = TELEGRAM_URL;
 /// Telegram Stars link once the account exists; the chat works today.
 pub const SUPPORT_URL: &str = TELEGRAM_URL;
 
+/// The donation link shown in Settings -> Help. Kept apart from `SUPPORT_URL`
+/// so a payout page can be swapped in without touching the support button.
+pub const DONATE_URL: &str = SUPPORT_URL;
+
 // Crash reports are opt-in and go to the maintainer's own project only. A
 // build without `REMIXCLIENT_SENTRY_DSN` sends nothing, so a fork never writes
 // into the upstream project's telemetry.
