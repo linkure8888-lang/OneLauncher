@@ -4,6 +4,7 @@
 
 # Gradle / Java build output
 companion/.gradle/
+companion/.settings/
 companion/build/
 *.class
 *.jar.tmp

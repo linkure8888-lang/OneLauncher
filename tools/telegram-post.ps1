@@ -59,6 +59,21 @@ if ($File) {
 # ── Токен ─────────────────────────────────────────────────────────────────────
 $Token = $env:REMIX_TG_TOKEN
 
+# A repo-root .env keeps the bot token out of git (.env is ignored) and out of
+# the profile, so a fresh clone plus one file is enough to post.
+if ([string]::IsNullOrWhiteSpace($Token)) {
+    $envFile = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content -Path $envFile -Encoding UTF8) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^REMIX_TG_TOKEN\s*=\s*(.+)$') {
+                $Token = $Matches[1].Trim().Trim('"').Trim("'")
+                break
+            }
+        }
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Token)) {
     $tokenFile = Join-Path $env:USERPROFILE '.remix\tg-token.txt'
     if (Test-Path $tokenFile) {
@@ -69,7 +84,8 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 if ([string]::IsNullOrWhiteSpace($Token)) {
     Write-Error @"
 Токен Telegram-бота не найден.
-Задайте переменную окружения REMIX_TG_TOKEN или положите токен (одну строку)
+Положите строку REMIX_TG_TOKEN=<токен> в .env в корне репозитория (.env не коммитится),
+либо задайте переменную окружения REMIX_TG_TOKEN, либо положите токен (одну строку)
 в файл: $env:USERPROFILE\.remix\tg-token.txt
 
 Подробнее: tools/telegram-post.md
