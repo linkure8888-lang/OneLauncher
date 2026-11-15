@@ -80,9 +80,11 @@ Build or download `oneclient_app.exe` and run it from any folder. Game data stil
 
 ### Linux and macOS
 
-Linux ships as `RemixClient_<version>_linux_x86_64.tar.gz`: unpack it anywhere and run `oneclient_app`. macOS ships as `.dmg` for Apple Silicon (`aarch64`) and Intel (`x64`).
+Linux ships two ways: `RemixClient_<version>_x86_64.AppImage` (recommended) and `RemixClient_<version>_linux_x86_64.tar.gz`.
 
-**Linux has no automatic updates.** The Linux build is a plain archive that cannot replace itself, so RemixClient only tells you a new version exists — download the new archive from Releases and unpack it over the old folder. Instances, accounts and worlds are not touched. The same note is shown in *Settings → Help*.
+**AppImage updates itself** in place, exactly like the Windows installer. The **tarball cannot** replace itself: unpack the new archive over the old folder; instances, accounts and worlds are not touched. The same note is shown in *Settings → Help*.
+
+macOS ships as `.dmg` for Apple Silicon (`aarch64`) and Intel (`x64`).
 
 macOS builds are **not notarised by Apple** (that costs 99 USD a year), so the first launch is blocked by Gatekeeper: right-click the app → *Open*, or allow it in *System Settings → Privacy & Security*.
 
@@ -271,9 +273,11 @@ RemixClient — это community-форк [OneLauncher](https://github.com/Polyf
 
 ### Linux и macOS
 
-Для Linux выкладывается `RemixClient_<версия>_linux_x86_64.tar.gz`: распакуй в любую папку и запусти `oneclient_app`. Для macOS есть `.dmg` под Apple Silicon (`aarch64`) и под Intel (`x64`).
+Для Linux два варианта: `RemixClient_<версия>_x86_64.AppImage` (рекомендую) и `RemixClient_<версия>_linux_x86_64.tar.gz`.
 
-**На Linux автообновления нет.** Сборка — обычный архив, который не может заменить себя сам: лаунчер только сообщит, что вышла новая версия. Скачай новый архив из Releases и распакуй поверх старой папки — сборки, аккаунты и миры не пострадают. Эта же памятка показана в *Настройки → Помощь*.
+**AppImage обновляется сам** — прямо на месте, как установщик на Windows. **Архив .tar.gz так не умеет**: скачай новый архив и распакуй поверх старой папки, сборки, аккаунты и миры не пострадают. Эта же памятка есть в *Настройки → Помощь*.
+
+Для macOS есть `.dmg` под Apple Silicon (`aarch64`) и под Intel (`x64`).
 
 macOS-сборки **не подписаны Apple** (сертификат стоит 99 $ в год), поэтому первый запуск блокирует Gatekeeper: правый клик по приложению → *Открыть*, либо разрешить в *Системные настройки → Конфиденциальность и безопасность*.
 
