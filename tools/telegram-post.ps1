@@ -26,7 +26,11 @@ param(
     [string]$ChatId,
 
     [switch]$Silent,
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # Escape hatch for a test channel: without it the script refuses to post
+    # anywhere except the RemixClient channel.
+    [switch]$AllowAnyChat
 )
 
 Set-StrictMode -Version Latest
@@ -66,8 +70,10 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
     if (Test-Path $envFile) {
         foreach ($line in Get-Content -Path $envFile -Encoding UTF8) {
             $trimmed = $line.Trim()
-            if ($trimmed -match '^REMIX_TG_TOKEN\s*=\s*(.+)$') {
-                $Token = $Matches[1].Trim().Trim('"').Trim("'")
+            # `tg-token=`, `TG_TOKEN=`, `REMIX_TG_TOKEN=` all work: the file is the
+            # user's, so accept the obvious spellings instead of one exact name.
+            if ($trimmed -match '^[A-Za-z_-]*(TG[_-]?TOKEN|REMIX_TOK[A-Z_]*)\s*=\s*(.+)$') {
+                $Token = $Matches[2].Trim().Trim('"').Trim("'")
                 break
             }
         }
@@ -94,11 +100,23 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 }
 
 # ── Chat id ───────────────────────────────────────────────────────────────────
+# Posts belong in the channel, not in random chats the bot may be dragged into.
+# Anything else needs an explicit -AllowAnyChat, so a typo cannot spam a group.
+$ChannelChatId = '@remixclient_ru'
+
 if ([string]::IsNullOrWhiteSpace($ChatId)) {
     $ChatId = $env:REMIX_TG_CHAT
 }
 if ([string]::IsNullOrWhiteSpace($ChatId)) {
-    $ChatId = '@remixclient_ru'
+    $ChatId = $ChannelChatId
+}
+
+if ($ChatId -ne $ChannelChatId -and -not $AllowAnyChat) {
+    Write-Error @"
+Отправка в «$ChatId» запрещена: скрипт постит только в канал $ChannelChatId.
+Если это действительно нужно, добавьте -AllowAnyChat (например, для тестового канала).
+"@
+    exit 1
 }
 
 # ── Экранирование HTML ────────────────────────────────────────────────────────

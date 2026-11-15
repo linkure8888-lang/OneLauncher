@@ -32,9 +32,9 @@ jobs:
             artifact: windows
             platform: windows-x86_64
             target: ""
-          - name: Linux (deb + AppImage)
+          - name: Linux (AppImage + tarball)
             os: ubuntu-22.04
-            formats: "deb appimage"
+            formats: "appimage"
             artifact: linux
             platform: linux-x86_64
             target: ""
@@ -107,6 +107,18 @@ jobs:
       # A plain tarball is the Linux artifact: it needs no dpkg, no AppImage
       # tooling and no desktop integration, so it cannot fail after the build.
       # deb and AppImage kept failing in packaging and are on the backlog.
+      # AppImage is the only Linux format the launcher can replace in place, so it
+      # is the one that gets real auto-updates. `-f` takes a single value here:
+      # `-f deb appimage` used to make clap read `appimage` as a subcommand.
+      - name: Package (Linux AppImage)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo packager -p oneclient_app --release -f appimage ${TARGET:+--target "$TARGET"} --verbose
+
+      # The tarball stays next to the AppImage: it needs no FUSE and no desktop
+      # integration, so a machine without libfuse can still run the game.
       - name: Package (Linux tarball)
         if: runner.os == 'Linux'
         shell: bash
