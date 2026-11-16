@@ -54,11 +54,22 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 - Discord RPC only works while the Discord desktop client is running and logged in.
   There is no server component.
 
+## Companion mod (paused until 3.0.0)
+
+The launcher does **not** install `companion/`; no Rust code references it. It was only
+copied by hand into the QA sandbox and has been removed from there. Decision 2026-11-15:
+keep the source (HUD + Right Alt screen, 4 files) for the 3.0.0 redesign, but do not ship
+it — everything it shows already exists in the bundle (armor: `DetailArmorBarReconstructed`),
+and the extra Right Alt hotkey confuses players. OneConfig and the eight `poly*` mods stay
+for now; `polydium` has **no license field**, so it must never be rebuilt or rebranded.
+
 ## Telegram
 
 - Channel: `@remixclient_ru` (`RemixClient`, id `-1004487205418`). Bot: `@remix_client_bot`
   (id `9106394088`), administrator with post / edit / delete / pin / change-info.
-- The bot token lives in `.env` in the repo root as `tg-token=...` (gitignored). The
+- The bot token lives in `.env` in the repo root as `TG_TOKEN=...` (gitignored). Keys
+  must be dotenv-valid: `sqlx` parses `.env` at compile time, so a hyphen in the key
+  name (`tg-token`) breaks every `sqlx::query!` with "error reading dotenv file". The
   posting script reads `.env` first, then `REMIX_TG_TOKEN`, then
   `%USERPROFILE%\.remix\tg-token.txt`, and refuses to post anywhere except the
   channel unless `-AllowAnyChat` is passed.
