@@ -36,7 +36,8 @@ pub use fabric::{mods_folder_argument, uses_cluster_mods_folder};
 pub use game_options::{read_graphics_backend, write_graphics_backend};
 pub use heal::clear_zeroed_files;
 pub use launch::{
-    LaunchedGame, crash_mod_issues, is_running, launch_cluster, launch_cluster_with, repair_cluster,
+    LaunchedGame, crash_mod_issues, is_running, launch_cluster, launch_cluster_with,
+    launch_cluster_with_args, repair_cluster,
 };
 pub use mod_problems::{ModProblem, ModProblemKind, ModRef};
 pub use offline_mods::{is_microsoft_only, sync_for_account as sync_offline_mods};

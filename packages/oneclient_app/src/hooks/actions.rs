@@ -1119,17 +1119,34 @@ impl Actions {
     }
 
     pub fn launch_cluster(&self, cluster_id: ClusterId) {
-        self.launch_with(cluster_id, None);
+        self.launch_with(cluster_id, None, None);
+    }
+
+    /// Joins straight from the server catalog: the launcher adds `--server`
+    /// itself, so the player skips the title screen and the server list.
+    pub fn launch_cluster_on_server(&self, cluster_id: ClusterId, address: String) {
+        if !valid_server_address(&address) {
+            tracing::warn!(%address, "refusing to launch on a malformed server address");
+            return;
+        }
+
+        self.launch_with(cluster_id, None, Some(format!("--server {address}")));
     }
 
     pub fn launch_cluster_for_invite(&self, cluster_id: ClusterId, invite_id: i32) {
         self.launch_with(
             cluster_id,
             Some(crate::invite_join::join_jvm_arg(invite_id)),
+            None,
         );
     }
 
-    fn launch_with(&self, cluster_id: ClusterId, extra_jvm_arg: Option<String>) {
+    fn launch_with(
+        &self,
+        cluster_id: ClusterId,
+        extra_jvm_arg: Option<String>,
+        extra_game_args: Option<String>,
+    ) {
         if let Some((title, body)) = cluster_busy(cluster_id) {
             self.notify(title).body(body).send();
             return;
@@ -1157,7 +1174,7 @@ impl Actions {
             let started = Instant::now();
             match cluster_busy_elsewhere(cluster_id).await {
                 Some((title, body)) => actions.notify(title).body(body).send(),
-                None => launch(&actions, cluster_id, extra_jvm_arg).await,
+                None => launch(&actions, cluster_id, extra_jvm_arg, extra_game_args).await,
             }
 
             // An instant failure would hand the button back inside the same
@@ -2658,7 +2675,23 @@ pub fn update_check_running(cluster_id: ClusterId) -> bool {
     UPDATE_CHECKS.lock().unwrap().contains(&cluster_id)
 }
 
-async fn launch(actions: &Actions, cluster_id: ClusterId, extra_jvm_arg: Option<String>) {
+/// Only a bare `host` or `host:port` is accepted. The value ends up on the game
+/// command line, so anything with spaces or quotes is refused instead of being
+/// escaped into something the player never asked for.
+fn valid_server_address(address: &str) -> bool {
+    !address.is_empty()
+        && address.len() <= 255
+        && address
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']' | '_'))
+}
+
+async fn launch(
+    actions: &Actions,
+    cluster_id: ClusterId,
+    extra_jvm_arg: Option<String>,
+    extra_game_args: Option<String>,
+) {
     let Ok(state) = launcher::state() else { return };
     let events = state.services.events.clone();
 
@@ -2732,13 +2765,16 @@ async fn launch(actions: &Actions, cluster_id: ClusterId, extra_jvm_arg: Option<
 
     off_ui(async move {
         let extra = extra_jvm_arg.as_deref();
-        if let Err(err) =
-            oneclient_core::launch_cluster_with(&state, cluster_id, &account, true, extra).await
+        let game = extra_game_args.as_deref();
+        if let Err(err) = oneclient_core::launch_cluster_with_args(
+            &state, cluster_id, &account, true, extra, game,
+        )
+        .await
         {
             // A missing file is the one failure the launcher can fix itself and a
             // path inside our metadata folder gives the user nothing to act on
             if err.indicates_missing_files() {
-                repair_and_relaunch(&state, cluster_id, &account, err, extra).await;
+                repair_and_relaunch(&state, cluster_id, &account, err, extra, game).await;
                 return;
             }
 
@@ -2756,6 +2792,7 @@ async fn repair_and_relaunch(
     account: &oneclient_auth::MinecraftAccount,
     original: oneclient_core::LauncherError,
     extra_jvm_arg: Option<&str>,
+    extra_game_args: Option<&str>,
 ) {
     let events = state.services.events.clone();
 
@@ -2790,8 +2827,15 @@ async fn repair_and_relaunch(
         .body(report.summary())
         .send();
 
-    if let Err(err) =
-        oneclient_core::launch_cluster_with(state, cluster_id, account, true, extra_jvm_arg).await
+    if let Err(err) = oneclient_core::launch_cluster_with_args(
+        state,
+        cluster_id,
+        account,
+        true,
+        extra_jvm_arg,
+        extra_game_args,
+    )
+    .await
     {
         tracing::error!(cluster_id, "launch failed again after repair: {err:#}");
         events.game_failed(cluster_id, format!("{err:#}"));

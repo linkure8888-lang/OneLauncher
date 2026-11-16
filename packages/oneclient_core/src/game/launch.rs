@@ -59,6 +59,29 @@ pub async fn launch_cluster_with(
     search_for_java: bool,
     extra_jvm_arg: Option<&str>,
 ) -> LauncherResult<LaunchedGame> {
+    launch_cluster_with_args(
+        state,
+        cluster_id,
+        account,
+        search_for_java,
+        extra_jvm_arg,
+        None,
+    )
+    .await
+}
+
+/// Same launch, plus game arguments the launcher adds itself. `extra_game_args`
+/// is a command line fragment, e.g. `--server play.example.com` for joining
+/// straight from the server catalog.
+#[tracing::instrument(skip(state, account))]
+pub async fn launch_cluster_with_args(
+    state: &Arc<LauncherState>,
+    cluster_id: i64,
+    account: &MinecraftAccount,
+    search_for_java: bool,
+    extra_jvm_arg: Option<&str>,
+    extra_game_args: Option<&str>,
+) -> LauncherResult<LaunchedGame> {
     tracing::info!(cluster_id, search_for_java, "launching cluster");
 
     // Parallel clusters or not a cluster runs only once a second game would
@@ -71,7 +94,15 @@ pub async fn launch_cluster_with(
         return Err(GameError::AlreadyRunning(cluster_id).into());
     }
 
-    let result = start(state, cluster_id, account, search_for_java, extra_jvm_arg).await;
+    let result = start(
+        state,
+        cluster_id,
+        account,
+        search_for_java,
+        extra_jvm_arg,
+        extra_game_args,
+    )
+    .await;
 
     if result.is_err() {
         state.games.remove(cluster_id);
@@ -98,6 +129,7 @@ async fn start(
     account: &MinecraftAccount,
     search_for_java: bool,
     extra_jvm_arg: Option<&str>,
+    extra_game_args: Option<&str>,
 ) -> LauncherResult<LaunchedGame> {
     let events = state.services.events.clone();
     let stage = |s: LaunchStage| {
@@ -522,6 +554,10 @@ async fn start(
         profile.force_fullscreen,
         profile.game_args.as_deref(),
     );
+    // Applying the launcher's own arguments second lets the dedupe above drop a
+    // `--server` the profile already had, so the player lands on the server
+    // they clicked rather than the one saved months ago.
+    arguments::append_profile_game_arguments(&mut mc_args, None, extra_game_args);
 
     drop(launch_slot);
 

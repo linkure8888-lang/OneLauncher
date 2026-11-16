@@ -54,7 +54,6 @@ impl Component for SettingsHelp {
             .child(report_card())
             .child(section_header(t("oneclient.settings.help.section.support")))
             .child(donate_row())
-            .maybe_child(linux_update_note())
             .into_element()
     }
 }
@@ -89,30 +88,6 @@ fn feature(icon: IconType, title: &'static str, body: &'static str) -> impl Into
                 ),
         )
         .into_element()
-}
-
-/// Linux ships a plain tarball, which the updater cannot replace in place, so
-/// say it once in Help instead of letting the player wonder why nothing updates.
-#[cfg(target_os = "linux")]
-fn linux_update_note() -> Option<Element> {
-    Some(
-        settings_row(
-            IconType::InfoCircle,
-            t("oneclient.settings.help.linux_update.title"),
-            t("oneclient.settings.help.linux_update.body"),
-            Button::new()
-                .secondary()
-                .on_press(|_| crate::platform::open_url(crate::constants::RELEASES_URL))
-                .child(Icon::new(IconType::Download01).size(16.))
-                .text(t("oneclient.settings.help.linux_update.button")),
-        )
-        .into_element(),
-    )
-}
-
-#[cfg(not(target_os = "linux"))]
-fn linux_update_note() -> Option<Element> {
-    None
 }
 
 /// A small, quiet row: the launcher is free, a donation is only a thank-you.
