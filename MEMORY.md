@@ -259,3 +259,35 @@ Findings:
 3. Create the GitHub repository, CI, signed release, MSI.
 4. Replace ToS/Privacy and the report URL.
 5. Decide the HUD approach and implement the first preset (after user approval).
+
+## RemixServer (self-hosted test cluster)
+
+Lives outside the repository at `C:\Users\user\Desktop\RemixServer` (never commit
+worlds or jars). Layout: `proxy/` Velocity 4.3.1 on 25565, `lobby/` Paper 26.3 on
+25566, `duels/` Paper 26.3 on 25567, bundled JDK 25 in `java/`, `plugin*/` sources
+for our own plugins, `START.bat` / `STOP.bat` / `BACKUP.bat`.
+
+- Backends bind `127.0.0.1` only; players reach the proxy. Velocity uses modern
+  forwarding with the secret in `proxy/forwarding.secret` (mirrored in each
+  backend's `paper-global.yml`).
+- `plugin/` = RemixLobby (hub island built from code, title, `/hub`, `/setspawn`,
+  compass that hands the player to `duels` over `bungeecord:main`).
+- `plugin-duels/` = RemixDuels (arena from code, kits, `/duel`, `/leave`, `/wins`,
+  wins persisted in the plugin config).
+- `plugin-auth/` = RemixAuth (nickname gate, see below).
+- Backups: `BACKUP.bat` zips both worlds plus plugin data, prunes beyond 14 days.
+
+### Nickname auth
+
+Offline mode trusts the nickname, so a hub cannot tell players apart. The launcher
+owns a per-install secret (`auth.key` in the data dir, created by
+`packages/oneclient_core/src/auth_gate.rs`) and, only for loopback servers,
+`POST`s `nick` + `token` to `http://127.0.0.1:8765/session` right before launch.
+RemixAuth binds the nick to the secret on first join and refuses other launchers
+afterwards; `/remixauth unbind <nick>` (op) releases it. The announcement is wired
+in `game/launch.rs` through `server_argument`.
+
+Publishing the server requires more before it is safe: the secret must never go
+over plaintext to a remote host, so a public gate needs TLS, an explicit opt-in in
+the server catalogue, and probably per-account identities instead of one install
+secret (today two offline accounts on the same install share it).
