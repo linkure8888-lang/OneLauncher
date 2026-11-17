@@ -1,5 +1,7 @@
 #![recursion_limit = "256"]
 
+pub mod auth_gate;
+
 #[cfg(debug_assertions)]
 pub mod dev;
 

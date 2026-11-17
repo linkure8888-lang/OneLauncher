@@ -559,6 +559,18 @@ async fn start(
     // they clicked rather than the one saved months ago.
     arguments::append_profile_game_arguments(&mut mc_args, None, extra_game_args);
 
+    // A hub that gates nicknames needs to hear from us before the client joins,
+    // otherwise the first packet it sees is an unauthenticated login.
+    if let Some(address) = extra_game_args.and_then(server_argument) {
+        let nickname = account.username.clone();
+        let announced =
+            tokio::task::spawn_blocking(move || crate::auth_gate::announce(&address, &nickname))
+                .await
+                .unwrap_or(false);
+
+        tracing::debug!(announced, "auth session announced to the server");
+    }
+
     drop(launch_slot);
 
     if let Some(reason) = run_hook(profile.hook_pre.as_deref(), &cwd).await {
@@ -1359,5 +1371,41 @@ mod jvm_arg_tests {
         assert_eq!(jvm_args_with(None, Some("-Da=1")), "-Da=1");
         assert_eq!(jvm_args_with(Some("-Xss2m"), None), "-Xss2m");
         assert_eq!(jvm_args_with(None, None), "");
+    }
+}
+
+/// Pulls `--server host:port` out of the launcher's own game arguments.
+///
+/// The value is the only place that knows where the player is heading, and the
+/// auth gate must hear from us before the client connects.
+fn server_argument(extra: &str) -> Option<String> {
+    let mut parts = extra.split_whitespace();
+    while let Some(part) = parts.next() {
+        if part == "--server" {
+            return parts.next().map(ToString::to_string);
+        }
+        if let Some(value) = part.strip_prefix("--server=") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod server_argument_tests {
+    use super::server_argument;
+
+    #[test]
+    fn reads_the_address_we_are_joining() {
+        assert_eq!(
+            server_argument("--server 127.0.0.1:25565"),
+            Some("127.0.0.1:25565".to_string())
+        );
+        assert_eq!(
+            server_argument("--server=play.example.com:25565"),
+            Some("play.example.com:25565".to_string())
+        );
+        assert_eq!(server_argument("--fullscreen"), None);
+        assert_eq!(server_argument("--server"), None);
     }
 }
