@@ -144,18 +144,18 @@ pub fn announce(address: &str, nickname: &str) -> bool {
     let Some(token) = token() else {
         return false;
     };
-
-    let Ok(mut addrs) = format!("127.0.0.1:{AUTH_PORT}").to_socket_addrs() else {
-        return false;
-    };
-    let Some(addr) = addrs.next() else {
+    let Ok(addr) = format!("127.0.0.1:{AUTH_PORT}").parse() else {
         return false;
     };
 
+    announce_to(addr, nickname, &token)
+}
+
+fn announce_to(addr: SocketAddr, nickname: &str, token: &str) -> bool {
     let body = format!(
         "nick={}&token={}",
         percent_encode(nickname),
-        percent_encode(&token)
+        percent_encode(token)
     );
 
     post_json(addr, "/session", &body).is_some_and(|response| response.starts_with("HTTP/1.1 200"))
@@ -224,6 +224,46 @@ ok",
         assert!(request.contains("Content-Length: 20"));
         assert!(request.ends_with("nick=Steve&token=abc"));
         assert!(response.starts_with("HTTP/1.1 200"));
+    }
+
+    fn gate_answering(status: &'static str) -> (SocketAddr, std::thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buffer = [0u8; 2048];
+            let read = socket.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+            socket
+                .write_all(
+                    format!(
+                        "HTTP/1.1 {status}
+Content-Length: 0
+
+"
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+            request
+        });
+        (addr, handle)
+    }
+
+    #[test]
+    fn an_accepted_session_returns_true() {
+        let (addr, gate) = gate_answering("200 OK");
+        assert!(announce_to(addr, "Steve", "a-very-secret-token"));
+
+        let request = gate.join().unwrap();
+        assert!(request.contains("nick=Steve&token=a-very-secret-token"));
+    }
+
+    #[test]
+    fn a_refused_session_returns_false() {
+        let (addr, gate) = gate_answering("403 Forbidden");
+        assert!(!announce_to(addr, "Steve", "someone-elses-token"));
+        gate.join().unwrap();
     }
 
     #[test]
