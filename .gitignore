@@ -22,3 +22,6 @@ Thumbs.db
 
 # Private notes: plan and roadmap, kept on disk only
 будущее клиента.txt
+
+# local video project (TikTok ad), not part of the launcher
+/tikkok-ad/
