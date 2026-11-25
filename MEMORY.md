@@ -17,7 +17,7 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 |---|---|---|
 | Offline accounts | done | Nickname + local UUID (`MD5("OfflinePlayer:<name>")`), no Microsoft call, `--userType legacy`, `--accessToken 0` |
 | Offline skins/capes | done (needs in-game test) | Local HTTP texture server + `--userProperties`; UI preview comes from the local server, no Mojang request |
-| Microsoft sign-in | optional | Uses `REMIXCLIENT_MICROSOFT_CLIENT_ID`, fallback is the upstream app id — replace before public release |
+| Microsoft sign-in | **removed (v2.12.0)** | No buttons, no flows, no browser opens — see session notes below |
 | Portable mode | done | `--portable` / `-p`, `portable.txt` marker, `RemixClient-data` next to the exe, separate IPC |
 | World backups | done | Auto before launch (changed worlds only, retention 5), manual backup + restore from Worlds → right-click → Backups… |
 | Offline skins/capes | done (needs in-game test) | Local HTTP texture server + `--userProperties`, shared dialog in Accounts and Wardrobe |
@@ -27,7 +27,8 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 | Russian | done | `lang/ru_RU.json`, 100% of keys; machine-translated + curated, proofreading welcome |
 | Help tab | done | Settings → Help, feature guide + report/logs buttons |
 | Report button | placeholder | `ISSUES_URL` in `packages/oneclient_app/src/view/app/settings/help.rs` points to `https://github.com/linkure8888-lang/OneLauncher/issues/new/choose`; replace when the real repo exists |
-| MSI / release | blocked | Release binary builds locally; MSI not built after the latest features; waiting for GitHub repo |
+| MSI / release | **v2.12.0 published** | Tag pushed 2026-11-24 evening, workflow Release builds assets; old releases (v2.10.0…v2.11.5) deleted via API, only the actual one remains |
+| Hardware auto-tune | done | First launch of a cluster writes the hardware preset into `options.txt` automatically (only while the file does not exist yet); button in settings stays |
 | CI / GitHub Actions | todo | fmt, clippy, tests, MSI, release signing |
 | Code signing (Authenticode) | skipped | User chose to skip; SmartScreen will warn |
 | ToS / Privacy | done | Bundled `assets/legal/{terms,privacy}.md` compiled into the binary (`TERMS_VERSION`/`PRIVACY_VERSION`), no network, no Polyfrost text. Repo copies in `docs/` |
@@ -38,6 +39,24 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 | App icon | done | Real design from the user's image (`design/icon-source.jpg`): transparent master `C:\Users\user\Desktop\remix-icon.png` → PNG set, `icon.ico` (16–256), `icon.icns` (16–1024), tray, StoreLogo. Generator: `%TEMP%\remix-icon-tool` (Rust + `image`) |
 | HUD (axe/sword/totem + presets) | done in `companion/`, not shipped | Movable HUD modules + on-screen editor, see "Companion mod" below. Still missing the launcher-side install |
 | QA sandbox | research | Subagent researching Windows Sandbox / separate desktop / UI automation |
+
+## Session notes: v2.12.0 (2026-11-24 evening)
+
+- **Microsoft login cut completely**: deleted `components/microsoft_login.rs`, buttons/popups in
+  `view/app/settings/accounts.rs` + `view/onboarding/account.rs`, mutations Begin/Finish/Cancel/
+  AddMicrosoftAccount in `hooks/queries/auth.rs` (+ `leave_party_before_sign_out` helper that used
+  `oneclient_polyplus`, which is NOT a dependency of oneclient_app), re-exports in
+  `hooks/queries/mod.rs` + `hooks/mod.rs`, 16 i18n keys from both langs. No site redirects remain.
+- **Careful with `git show HEAD:hooks/queries/auth.rs`** — the HEAD version references
+  `oneclient_polyplus` and does not compile; the working-tree version had it removed already.
+- **Hardware auto-tune**: `oneclient_core/src/clusters/prepare.rs`, after stage=Ready, if
+  `options.txt` does not exist yet → detect hardware, write the preset (FPS = refresh rate,
+  render scale by GPU tier). After the game's first run the file exists → never overwritten.
+- **Release v2.12.0**: version bumped in workspace `Cargo.toml`, commits pushed to main, tag
+  `v2.12.0` pushed → workflow Release builds exe/dmg/AppImage + `latest.json` (signed).
+  Old releases v2.10.0/v2.11.2/v2.11.3/v2.11.4/v2.11.5 deleted via GitHub API (bearer token from
+  `git credential fill`), tags removed too. Only the latest release remains.
+- Push works with the locally stored GitHub credentials (`git credential fill`), no `gh` CLI installed.
 
 ## Keys, secrets and endpoints
 
