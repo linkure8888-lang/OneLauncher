@@ -2486,6 +2486,48 @@ async fn prune_mods_links_in(root: &Path, known: &HashSet<PathBuf>) {
     }
 }
 
+const COMPANION_CONFIG_NAME: &str = "config/remix-companion.json";
+
+/// Pins the launcher's UI language into the companion mod's config, so the in-game
+/// screens (quick menu, HUD editor) match the launcher language. Only languages the
+/// companion actually has translations for are pinned; anything else keeps `auto`,
+/// which follows the game's own language.
+#[tracing::instrument(level = "debug", skip_all)]
+pub async fn sync_companion_language(game_dir: &Path, launcher_language: Option<&str>) {
+    let pinned = match launcher_language {
+        Some(code) if code.starts_with("ru") => "ru",
+        Some(code) if code.starts_with("en") => "en",
+        _ => return,
+    };
+
+    let path = game_dir.join(COMPANION_CONFIG_NAME);
+    let Ok(bytes) = polyio::read(&path).await else {
+        // The companion is optional: no config file means it is not installed.
+        return;
+    };
+    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        // A corrupt config is the mod's business (it re-creates its own defaults);
+        // overwriting it from here could destroy hand-tuned settings.
+        tracing::debug!(path = %path.display(), "companion config is not valid json, skipping language sync");
+        return;
+    };
+
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    if object.get("language").and_then(|v| v.as_str()) == Some(pinned) {
+        return;
+    }
+    object.insert("language".into(), serde_json::Value::String(pinned.into()));
+
+    if let Ok(json) = serde_json::to_vec_pretty(&value) {
+        if let Err(err) = polyio::write(&path, json).await {
+            tracing::warn!(path = %path.display(), error = %err,
+                "could not write the companion language");
+        }
+    }
+}
+
 const ALLOWED_SYMLINKS_NAME: &str = "allowed_symlinks.txt";
 
 #[tracing::instrument(level = "debug")]

@@ -2,9 +2,7 @@ use freya::prelude::*;
 use freya::query::{MutationCapability, MutationStateData, UseMutation};
 use oneclient_auth::{MinecraftAccount, offline_uuid, validate_offline_username};
 
-use crate::components::{
-    Avatar, Button, Icon, IconType, MicrosoftLogin, TextInput, use_microsoft_login,
-};
+use crate::components::{Avatar, Button, Icon, IconType, TextInput};
 use crate::hooks::{
     AddOfflineAccountKeys, mutation_is_running, mutation_ok, try_default_account,
     use_add_offline_account, use_current_account,
@@ -12,7 +10,6 @@ use crate::hooks::{
 use crate::i18n::t;
 use crate::routes::Route;
 use crate::theme::{colors, text_size};
-use crate::ui::divider;
 use crate::view::onboarding::{
     onboarding_illustration, onboarding_nav, onboarding_page, step_heading,
 };
@@ -23,7 +20,6 @@ pub struct OnboardingAccount;
 impl Component for OnboardingAccount {
     fn render(&self) -> impl IntoElement {
         let account_query = use_current_account();
-        let msa = use_microsoft_login();
         let add_offline = use_add_offline_account();
         let username = use_state(String::new);
 
@@ -54,7 +50,7 @@ impl Component for OnboardingAccount {
             ))
             .child(match &account {
                 Some(account) => account_preview(account).into_element(),
-                None => offline_form(username, pending, error, on_play, msa.clone()).into_element(),
+                None => offline_form(username, pending, error, on_play).into_element(),
             })
             .into_element();
 
@@ -68,11 +64,7 @@ impl Component for OnboardingAccount {
             ),
         );
 
-        rect()
-            .width(Size::fill())
-            .height(Size::fill())
-            .child(page)
-            .maybe_child(msa.popup())
+        rect().width(Size::fill()).height(Size::fill()).child(page)
     }
 }
 
@@ -118,16 +110,10 @@ fn offline_form(
     pending: bool,
     error: Option<String>,
     on_play: impl FnMut(Event<PressEventData>) + 'static,
-    msa: MicrosoftLogin,
 ) -> impl IntoElement {
     let name = username.read().trim().to_string();
     let valid = validate_offline_username(&name).is_ok();
     let uuid = valid.then(|| offline_uuid(&name).to_string());
-    let msa_pending = msa.pending;
-    let msa_error = msa.error.clone();
-
-    let start_msa = msa;
-    let on_msa = move |_: Event<PressEventData>| start_msa.start();
 
     rect()
         .vertical()
@@ -180,35 +166,6 @@ fn offline_form(
         )
         .maybe_child(
             error.map(|message| hint_line(IconType::AlertTriangle, message, colors::danger())),
-        )
-        .child(divider())
-        .child(
-            rect()
-                .horizontal()
-                .width(Size::fill())
-                .cross_align(Alignment::Center)
-                .spacing(12.)
-                .child(
-                    Button::new()
-                        .secondary()
-                        .enabled(!msa_pending)
-                        .on_press(on_msa)
-                        .child(Icon::new(IconType::Globe01).size(16.))
-                        .text(if msa_pending {
-                            t("oneclient.onboarding.account.signing_in")
-                        } else {
-                            t("oneclient.onboarding.account.add")
-                        }),
-                )
-                .child(
-                    label()
-                        .text(t("oneclient.onboarding.account.microsoft_optional"))
-                        .font_size(text_size(12.))
-                        .color(colors::fg_secondary()),
-                ),
-        )
-        .maybe_child(
-            msa_error.map(|message| hint_line(IconType::AlertTriangle, message, colors::danger())),
         )
         .into_element()
 }

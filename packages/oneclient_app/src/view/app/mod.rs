@@ -1,11 +1,13 @@
 mod analytics;
 mod clusters;
-mod debug;
-mod friends;
 mod home;
-mod servers;
 mod skins;
 mod stats;
+// The server catalog is temporarily hidden from the UI (a revenue feature is
+// still being prepared). The code is kept on disk and compiles again as soon
+// as this module is restored here and the route/nav links are re-added.
+#[cfg(any())]
+mod servers;
 
 pub mod browser;
 pub mod cluster;
@@ -71,13 +73,8 @@ pub fn launch_syncing(launcher: &LauncherInit, uses_bundles: bool) -> bool {
 }
 
 pub(crate) use analytics::{analytics_body, analytics_placeholder};
-pub(crate) use clusters::{
-    ClusterPickerButton, ClusterPickerModal, CreateInstanceModal, DeleteInstanceModal,
-};
+pub(crate) use clusters::{ClusterPickerButton, DeleteInstanceModal};
 pub use clusters::{Clusters, ExportInstanceModal};
-pub use debug::Debug;
-pub use friends::Friends;
 pub use home::Home;
-pub use servers::Servers;
 pub use skins::Skins;
 pub use stats::Stats;

@@ -28,11 +28,6 @@ pub fn install(table: Option<HashMap<String, String>>) {
     *ACTIVE.write().unwrap_or_else(|e| e.into_inner()) = table;
 }
 
-pub fn coverage() -> Option<u32> {
-    let active = (*ACTIVE.read().unwrap_or_else(|e| e.into_inner()))?;
-    Some((active.len() * 100 / EN_US.len().max(1)) as u32)
-}
-
 pub fn arity(text: &str) -> usize {
     let mut sequential = 0;
     let mut highest = 0;

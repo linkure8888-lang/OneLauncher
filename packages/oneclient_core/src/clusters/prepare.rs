@@ -116,6 +116,25 @@ pub async fn prepare_cluster(
         .set_stage(cluster_id, ClusterStage::Ready)
         .await?;
     tracing::debug!(cluster_id, "cluster stage set to Ready");
+
+    // First-launch auto-tune: while the game has not created its own options.txt
+    // yet, write the hardware preset so the first session already matches this
+    // machine (frame cap at the monitor's refresh rate instead of uncapped).
+    // Once the file exists it belongs to the game and the player, never touched.
+    if let Ok(dir) = cluster.game_dir() {
+        let options = dir.join("options.txt");
+        if !options.exists() {
+            let hardware = crate::presets::detect_hardware().await;
+            let plan = crate::presets::plan(&hardware, None);
+            match crate::presets::write_options(&options, &plan) {
+                Ok(()) => tracing::info!(cluster_id, "hardware preset applied on first launch"),
+                Err(err) => {
+                    tracing::warn!(cluster_id, error = %err, "hardware preset could not be applied")
+                }
+            }
+        }
+    }
+
     Ok(cluster)
 }
 

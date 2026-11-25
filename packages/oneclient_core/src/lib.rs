@@ -6,7 +6,6 @@ pub mod auth_gate;
 pub mod dev;
 
 pub mod bisect;
-pub mod changelog;
 pub mod clusters;
 pub mod disable_warnings;
 mod error;
@@ -36,7 +35,6 @@ pub use bisect::{
     decline_bisect_suggestion, finish_bisect, keep_bisect_mods_on, restart_bisect,
     skip_bisect_answer, start_bisect, undo_bisect_answer,
 };
-pub use changelog::{ChangelogEntry, fetch_changelog};
 pub use clusters::{
     Cluster, ClusterError, ClusterManager, ClusterStage, ClusterUpdate, CreateClusterOptions,
     apply_bundle_java_override, ensure_from_bundles, ensure_from_versions,

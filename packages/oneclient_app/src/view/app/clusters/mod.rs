@@ -5,7 +5,7 @@ mod instance;
 mod page;
 mod reset_instance;
 
-pub use cluster_picker::{ClusterPickerButton, ClusterPickerModal};
+pub use cluster_picker::ClusterPickerButton;
 pub use delete_instance::DeleteInstanceModal;
 pub use export_instance::ExportInstanceModal;
 pub use instance::{CreateInstanceModal, EditInstanceModal, InstanceFacts};

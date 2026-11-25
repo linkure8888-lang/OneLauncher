@@ -4,7 +4,6 @@
 #![recursion_limit = "256"]
 
 mod assets;
-pub mod chat;
 pub mod cli;
 mod components;
 pub mod disable;
@@ -14,7 +13,6 @@ pub(crate) mod file_content;
 pub mod hooks;
 pub(crate) mod i18n;
 mod install;
-pub mod invite_join;
 pub mod ipc;
 mod launcher;
 mod layout;
@@ -45,4 +43,3 @@ pub use events::EventPump;
 pub use hooks::*;
 pub use routes::{Route, router};
 pub use state::{AppChannel, AppState};
-pub use view::chat::close_chat_window;

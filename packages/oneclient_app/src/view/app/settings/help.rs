@@ -91,14 +91,22 @@ fn feature(icon: IconType, title: &'static str, body: &'static str) -> impl Into
 }
 
 /// A small, quiet row: the launcher is free, a donation is only a thank-you.
+/// A placeholder for now: no payout method is set up yet, so the button thanks
+/// the player and points at the Telegram chat instead of a dead payment link.
 fn donate_row() -> impl IntoElement {
+    let dispatch = crate::hooks::use_dispatch();
     settings_row(
         IconType::IconLogo,
         t("oneclient.settings.help.donate.title"),
         t("oneclient.settings.help.donate.body"),
         Button::new()
             .secondary()
-            .on_press(|_| crate::platform::open_url(oneclient_common::constants::DONATE_URL))
+            .on_press(move |_| {
+                dispatch
+                    .notify(t("oneclient.settings.help.donate.stub.title"))
+                    .body(t("oneclient.settings.help.donate.stub.body"))
+                    .send();
+            })
             .child(Icon::new(IconType::Rocket02).size(16.))
             .text(t("oneclient.settings.help.donate.button")),
     )

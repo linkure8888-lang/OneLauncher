@@ -1,9 +1,7 @@
 use freya::prelude::*;
-use freya::router::RouterContext;
 use oneclient_core::settings::LauncherSettings;
 
 use super::settings_page;
-use crate::Route;
 use crate::components::{IconType, link_button, toggle};
 use crate::hooks::{
     BROWSER_COMPAT_DEFAULT, use_browser_compat, use_dispatch, use_settings_snapshot,
@@ -66,14 +64,6 @@ impl Component for SettingsDeveloper {
                 t("oneclient.settings.developer.log_console.title"),
                 t("oneclient.settings.developer.log_console.description"),
                 link_button().on_press(move |_| open_log_console()),
-            ))
-            .child(settings_row(
-                IconType::CodeSnippet02,
-                t("oneclient.settings.developer.debug_page.title"),
-                t("oneclient.settings.developer.debug_page.description"),
-                link_button().on_press(move |_| {
-                    let _ = RouterContext::get().push(Route::Debug {});
-                }),
             ))
             .into_element()
     }

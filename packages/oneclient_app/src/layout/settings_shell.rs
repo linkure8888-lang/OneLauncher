@@ -14,7 +14,6 @@ use sysinfo::System;
 use crate::components::{
     Icon, IconType, ScrollArea, ScrollAreaCtx, TextInput, TooltipPlacement, use_tooltip_anchor,
 };
-use crate::hooks::{latest_changelog_version, use_changelog, use_settings_snapshot};
 use crate::i18n::{t, tf};
 use crate::routes::Route;
 use crate::theme::{colors, rounded, text_size};
@@ -269,28 +268,12 @@ fn search_index() -> Vec<SearchItem> {
             route: Route::SettingsDeveloper {},
         },
         SearchItem {
-            id: "developer.debug_page",
-            icon: IconType::CodeSnippet02,
-            title: t("oneclient.settings.developer.debug_page.title"),
-            description: t("oneclient.layout.search.developer.debug_page.description"),
-            keywords: &["debug", "page"],
-            route: Route::SettingsDeveloper {},
-        },
-        SearchItem {
             id: "nav.accounts",
             icon: IconType::Users01,
             title: t("oneclient.layout.settings.tab.accounts"),
             description: t("oneclient.layout.search.nav.accounts.description"),
             keywords: &["account", "login", "microsoft", "msa"],
             route: Route::SettingsAccounts {},
-        },
-        SearchItem {
-            id: "nav.changelog",
-            icon: IconType::RefreshCcw02,
-            title: t("oneclient.layout.settings.tab.changelog"),
-            description: t("oneclient.layout.search.nav.changelog.description"),
-            keywords: &["changelog", "release notes", "updates"],
-            route: Route::SettingsChangelog {},
         },
         SearchItem {
             id: "help.features",
@@ -325,7 +308,6 @@ pub enum SettingsTab {
     Apis,
     Language,
     DeveloperOptions,
-    Changelog,
     Help,
 }
 
@@ -341,7 +323,6 @@ impl SettingsTab {
             Self::Apis => t("oneclient.layout.settings.tab.apis"),
             Self::Language => t("oneclient.layout.settings.tab.language"),
             Self::DeveloperOptions => t("oneclient.layout.settings.tab.developer"),
-            Self::Changelog => t("oneclient.layout.settings.tab.changelog"),
             Self::Help => t("oneclient.layout.settings.tab.help"),
         }
     }
@@ -357,7 +338,6 @@ impl SettingsTab {
             Self::Apis => IconType::Key01,
             Self::Language => IconType::Globe01,
             Self::DeveloperOptions => IconType::CodeSnippet02,
-            Self::Changelog => IconType::RefreshCcw02,
             Self::Help => IconType::HelpCircle,
         }
     }
@@ -373,7 +353,6 @@ impl SettingsTab {
             Self::Apis => Some(Route::SettingsApis {}),
             Self::Language => Some(Route::SettingsLanguage {}),
             Self::DeveloperOptions => Some(Route::SettingsDeveloper {}),
-            Self::Changelog => Some(Route::SettingsChangelog {}),
             Self::Help => Some(Route::SettingsHelp {}),
         }
     }
@@ -403,11 +382,7 @@ fn groups() -> [SettingsGroup; 3] {
         },
         SettingsGroup {
             label: t("oneclient.layout.settings.group.about"),
-            tabs: &[
-                SettingsTab::DeveloperOptions,
-                SettingsTab::Changelog,
-                SettingsTab::Help,
-            ],
+            tabs: &[SettingsTab::DeveloperOptions, SettingsTab::Help],
         },
     ]
 }
@@ -425,7 +400,6 @@ fn route_tab(route: &Route) -> SettingsTab {
         Route::SettingsApis {} => SettingsTab::Apis,
         Route::SettingsLanguage {} => SettingsTab::Language,
         Route::SettingsDeveloper {} => SettingsTab::DeveloperOptions,
-        Route::SettingsChangelog {} => SettingsTab::Changelog,
         Route::SettingsHelp {} => SettingsTab::Help,
         _ => SettingsTab::Appearance,
     }
@@ -435,8 +409,6 @@ impl Component for SettingsShell {
     fn render(&self) -> impl IntoElement {
         let route = use_route::<Route>();
         let active = route_tab(&route);
-
-        let changelog_unread = has_unread_changelog();
 
         let search = use_state(String::new);
         let header_width = use_state(|| 0f32);
@@ -479,7 +451,7 @@ impl Component for SettingsShell {
             .overflow(Overflow::Clip)
             .padding(Gaps::new(0., 40., 40., 32.))
             .spacing(40.)
-            .child(sidebar(active, changelog_unread))
+            .child(sidebar(active))
             .child(
                 rect()
                     .vertical()
@@ -687,18 +659,7 @@ fn search_results(query: &SearchQuery, mut search: State<String>) -> Vec<Element
     out
 }
 
-/// False while the changelog is loading or failed rather than guessing
-fn has_unread_changelog() -> bool {
-    let settings = use_settings_snapshot().settings;
-    let query = use_changelog();
-
-    match latest_changelog_version(&query) {
-        Some(latest) => settings.seen_changelog_version.as_deref() != Some(latest.as_str()),
-        None => false,
-    }
-}
-
-fn sidebar(active: SettingsTab, changelog_unread: bool) -> impl IntoElement {
+fn sidebar(active: SettingsTab) -> impl IntoElement {
     rect()
         .vertical()
         .width(Size::px(SIDEBAR_WIDTH_PX))
@@ -730,7 +691,6 @@ fn sidebar(active: SettingsTab, changelog_unread: bool) -> impl IntoElement {
                             SidebarItem {
                                 tab: *tab,
                                 active: *tab == active,
-                                has_dot: matches!(tab, SettingsTab::Changelog) && changelog_unread,
                             }
                             .into_element()
                         }))
@@ -842,7 +802,6 @@ impl Component for SidebarInfo {
 struct SidebarItem {
     tab: SettingsTab,
     active: bool,
-    has_dot: bool,
 }
 
 impl Component for SidebarItem {
@@ -863,8 +822,6 @@ impl Component for SidebarItem {
         } else {
             Color::TRANSPARENT
         };
-
-        let has_dot = self.has_dot;
 
         let mut el = rect()
             .horizontal()
@@ -909,16 +866,7 @@ impl Component for SidebarItem {
                             .text(tab.label())
                             .font_size(text_size(14.))
                             .color(colors::fg_primary()),
-                    )
-                    .maybe_child(has_dot.then(notification_dot)),
+                    ),
             )
     }
-}
-
-fn notification_dot() -> impl IntoElement {
-    rect()
-        .width(Size::px(4.))
-        .height(Size::px(4.))
-        .corner_radius(rounded(2.))
-        .background(colors::brand())
 }

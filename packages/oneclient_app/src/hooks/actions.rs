@@ -138,8 +138,6 @@ pub enum PumpSignal {
     Reconcile,
     PauseToasts,
     ResumeToasts,
-    Chat(super::chat::ChatJob),
-    JoinInvite(i32),
 }
 
 #[derive(Clone)]
@@ -322,21 +320,6 @@ impl Actions {
         });
     }
 
-    pub fn set_seen_changelog_version(&self, version: impl Into<String>) {
-        let version = version.into();
-        let mut changed = false;
-        let updated = self.mutate_settings(|settings| {
-            if settings.seen_changelog_version.as_deref() != Some(version.as_str()) {
-                settings.seen_changelog_version = Some(version);
-                changed = true;
-            }
-        });
-
-        if let (true, Some(updated)) = (changed, updated) {
-            self.persist(updated);
-        }
-    }
-
     pub fn acknowledge_disable_warnings(&self, package_ids: &[String]) {
         if package_ids.is_empty() {
             return;
@@ -404,12 +387,6 @@ impl Actions {
 
     pub fn decline_tos(&self) {
         oneclient_common::consent::decline();
-        crate::view::chat::close_chat_window();
-        {
-            let mut guard = self.station.clone().write_channel(AppChannel::Social);
-            guard.social_open = false;
-            guard.social_popped_notice = false;
-        }
 
         if let Some(updated) = self.mutate_settings(|settings| {
             settings.declined_tos = true;
@@ -773,43 +750,6 @@ impl Actions {
             .control_center_open = false;
     }
 
-    pub fn toggle_social(&self) {
-        let open = self.station.peek().social_open;
-        let mut guard = self.station.clone().write_channel(AppChannel::Social);
-        guard.social_open = !open;
-        guard.social_popped_notice = false;
-    }
-
-    pub fn close_social(&self) {
-        self.station
-            .clone()
-            .write_channel(AppChannel::Social)
-            .social_open = false;
-    }
-
-    pub fn pop_out_social(&self) {
-        {
-            let mut guard = self.station.clone().write_channel(AppChannel::Social);
-            guard.social_open = false;
-            guard.social_popped_notice = true;
-        }
-        crate::view::chat::open_chat_window();
-    }
-
-    pub fn dock_social(&self) {
-        crate::view::chat::close_chat_window();
-        let mut guard = self.station.clone().write_channel(AppChannel::Social);
-        guard.social_open = true;
-        guard.social_popped_notice = false;
-    }
-
-    pub fn dismiss_social_notice(&self) {
-        self.station
-            .clone()
-            .write_channel(AppChannel::Social)
-            .social_popped_notice = false;
-    }
-
     pub fn close_notification_center(&self) {
         self.with_engine(|state| state.center_open = false);
     }
@@ -817,12 +757,6 @@ impl Actions {
     pub fn clear_notification_inbox(&self) {
         self.with_engine(|state| {
             state.notifications.clear_inbox(&mut state.inbox);
-        });
-    }
-
-    pub fn clear_chat_notices(&self) {
-        self.with_engine(|state| {
-            state.notifications.clear_chat_notices(&mut state.inbox);
         });
     }
 
@@ -1131,14 +1065,6 @@ impl Actions {
         }
 
         self.launch_with(cluster_id, None, Some(format!("--server {address}")));
-    }
-
-    pub fn launch_cluster_for_invite(&self, cluster_id: ClusterId, invite_id: i32) {
-        self.launch_with(
-            cluster_id,
-            Some(crate::invite_join::join_jvm_arg(invite_id)),
-            None,
-        );
     }
 
     fn launch_with(

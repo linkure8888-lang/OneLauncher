@@ -318,39 +318,26 @@ impl Component for ServerRow {
         let address = format!("{}:{}", self.entry.address, self.entry.port);
         let address_for_copy = address.clone();
         let address_for_play = address.clone();
-        let server_id_for_click = self.entry.id.clone();
-        let server_id_for_play = self.entry.id.clone();
 
         // Joining from the catalog skips the title screen entirely: the launcher
         // hands Minecraft `--server`, so the player lands in the hub or arena.
         let play = {
             let dispatch = dispatch.clone();
-            let mut active_id = use_active_cluster_id();
-            move |_: Event<PressEventData>| {
-                let sid = server_id_for_play.clone();
-                spawn(async move {
-                    oneclient_core::servers::record_server_click(&sid).await;
-                });
-
-                match *active_id.read() {
-                    Some(cluster_id) => {
-                        dispatch.launch_cluster_on_server(cluster_id, address_for_play.clone());
-                    }
-                    None => dispatch
-                        .notify(t("oneclient.servers.play.no_cluster.title"))
-                        .body(t("oneclient.servers.play.no_cluster.body"))
-                        .error()
-                        .send(),
+            let active_id = use_active_cluster_id();
+            move |_: Event<PressEventData>| match *active_id.read() {
+                Some(cluster_id) => {
+                    dispatch.launch_cluster_on_server(cluster_id, address_for_play.clone());
                 }
+                None => dispatch
+                    .notify(t("oneclient.servers.play.no_cluster.title"))
+                    .body(t("oneclient.servers.play.no_cluster.body"))
+                    .error()
+                    .send(),
             }
         };
         let copy = {
             let dispatch = dispatch.clone();
             move |_: Event<PressEventData>| {
-                let sid = server_id_for_click.clone();
-                spawn(async move {
-                    oneclient_core::servers::record_server_click(&sid).await;
-                });
                 if freya::text_edit::Clipboard::set(address_for_copy.clone()).is_ok() {
                     dispatch.notify(t("oneclient.servers.copied")).send();
                 }

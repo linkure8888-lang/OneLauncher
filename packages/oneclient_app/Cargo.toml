@@ -21,11 +21,9 @@ oneclient_content.workspace = true
 oneclient_events.workspace = true
 oneclient_java.workspace = true
 oneclient_mc.workspace = true
-oneclient_polyplus.workspace = true
 oneclient_net.workspace = true
 oneclient_core.workspace = true
 oneclient_db.workspace = true
-oneclient_social.workspace = true
 chrono.workspace = true
 oneclient_macro = { workspace = true, features = ["freya"] }
 

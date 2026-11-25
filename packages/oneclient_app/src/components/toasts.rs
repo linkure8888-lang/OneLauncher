@@ -11,10 +11,7 @@ use oneclient_events::Level;
 
 use crate::{
     components::{Button, ButtonSize, Icon, IconType, TooltipPlacement, progress_track},
-    hooks::{
-        use_chat_allowed, use_dispatch, use_link_confirm, use_notifications_snapshot,
-        use_social_open,
-    },
+    hooks::{use_dispatch, use_link_confirm, use_notifications_snapshot},
     i18n::t,
     motion::use_animations_enabled,
     notifications::{InboxEntry, NotificationActionKind},
@@ -29,7 +26,6 @@ const TTL_STEP: std::time::Duration = std::time::Duration::from_millis(100);
 /// Below the navbar a smaller offset let the startup progress toast cover the nav links
 const TOP_PX: f32 = crate::theme::NAVBAR_HEIGHT_PX + 12.;
 const RIGHT_PX: f32 = 24.;
-const DOCKED_GAP_PX: f32 = 12.;
 const LAYER_LEVEL: u8 = 2;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -70,8 +66,6 @@ impl Component for Toasts {
         let snapshot = use_notifications_snapshot();
         // While any toast is hovered every toast's timer pauses
         let hovering = use_state(|| 0usize);
-        let social_open = use_social_open();
-        let chat_allowed = use_chat_allowed();
 
         let entries: Vec<InboxEntry> = snapshot
             .active_toast_entry_ids
@@ -83,11 +77,7 @@ impl Component for Toasts {
             return rect().into_element();
         }
 
-        let right = if social_open && chat_allowed {
-            crate::view::chat::DOCKED_INSET_PX + DOCKED_GAP_PX
-        } else {
-            RIGHT_PX
-        };
+        let right = RIGHT_PX;
         let mut stack = rect()
             .vertical()
             .spacing(12.)
@@ -417,7 +407,6 @@ fn action_row(
     let review_kind = action.map(|a| a.kind);
     let review_icon = match review_kind {
         Some(NotificationActionKind::OpenUrl(_)) => IconType::LinkExternal01,
-        Some(NotificationActionKind::OpenChat(_)) => IconType::MessageTextSquare01,
         _ => IconType::Eye,
     };
 

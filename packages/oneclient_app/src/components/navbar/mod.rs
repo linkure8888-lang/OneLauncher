@@ -36,7 +36,6 @@ pub fn window_controls_with(foreground: Option<Color>) -> impl IntoElement {
     };
 
     let close = |_| {
-        crate::view::chat::close_chat_window();
         crate::platform::close();
     };
 

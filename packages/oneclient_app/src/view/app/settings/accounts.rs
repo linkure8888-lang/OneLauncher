@@ -10,8 +10,7 @@ use uuid::Uuid;
 
 use super::{section_header, settings_page};
 use crate::components::{
-    Avatar, Button, Dropdown, Icon, IconType, MicrosoftLogin, OverlayPopup, PlayerModel, TextInput,
-    use_microsoft_login,
+    Avatar, Button, Dropdown, Icon, IconType, OverlayPopup, PlayerModel, TextInput,
 };
 use crate::hooks::{
     AddOfflineAccountKeys, RefreshAccountKeys, RemoveAccountKeys, SetDefaultAccountKeys,
@@ -36,7 +35,6 @@ impl Component for SettingsAccounts {
         let accounts_query = use_accounts();
         let default_query = use_current_account();
 
-        let msa = use_microsoft_login();
         let add_offline = use_add_offline_account();
         let set_default = use_set_default_account();
         let remove = use_remove_account();
@@ -95,7 +93,6 @@ impl Component for SettingsAccounts {
                     set_default,
                     remove,
                     refresh,
-                    sign_in: msa.clone(),
                 }
                 .into_element()
             })
@@ -105,16 +102,7 @@ impl Component for SettingsAccounts {
         }
 
         settings_page()
-            .child(hero(
-                default_account,
-                msa.pending,
-                msa.error.clone(),
-                move |_| show_offline.set(true),
-                {
-                    let msa = msa.clone();
-                    move |_| msa.start()
-                },
-            ))
+            .child(hero(default_account, move |_| show_offline.set(true)))
             .child(section_header(t(
                 "oneclient.settings.accounts.section.your_accounts",
             )))
@@ -128,17 +116,13 @@ impl Component for SettingsAccounts {
                     show_offline,
                 )
             }))
-            .maybe_child(msa.popup())
             .into_element()
     }
 }
 
 fn hero(
     account: Option<MinecraftAccount>,
-    microsoft_pending: bool,
-    error: Option<String>,
     on_open_offline: impl FnMut(Event<PressEventData>) + 'static,
-    on_add_microsoft: impl FnMut(Event<PressEventData>) + 'static,
 ) -> impl IntoElement {
     let (name, subtitle) = match &account {
         Some(account) if account.needs_sign_in() => (
@@ -195,40 +179,14 @@ fn hero(
                         ),
                 )
                 .child(
-                    rect()
-                        .vertical()
-                        .width(Size::fill())
-                        .spacing(8.)
-                        .child(
-                            // The two buttons overflow the ~245px beside the model at the 800px minimum so they wrap
-                            rect()
-                                .horizontal()
-                                .width(Size::fill())
-                                .content(Content::wrap_spacing(8.))
-                                .spacing(8.)
-                                .child(
-                                    Button::new()
-                                        .primary()
-                                        .enabled(!microsoft_pending)
-                                        .on_press(on_add_microsoft)
-                                        .child(Icon::new(IconType::Globe01).size(16.))
-                                        .text(if microsoft_pending {
-                                            t("oneclient.settings.accounts.signing_in")
-                                        } else {
-                                            t("oneclient.settings.accounts.add_microsoft")
-                                        }),
-                                )
-                                .child(
-                                    Button::new()
-                                        .secondary()
-                                        .on_press(on_open_offline)
-                                        .child(Icon::new(IconType::Plus).size(16.))
-                                        .text(t("oneclient.settings.accounts.add_offline")),
-                                ),
-                        )
-                        .map(error, |el, msg| {
-                            el.child(hint_line(IconType::AlertTriangle, msg, colors::danger()))
-                        }),
+                    rect().vertical().width(Size::fill()).spacing(8.).child(
+                        // One button keeps the ~245px beside the model clear at the 800px minimum
+                        Button::new()
+                            .primary()
+                            .on_press(on_open_offline)
+                            .child(Icon::new(IconType::Plus).size(16.))
+                            .text(t("oneclient.settings.accounts.add_offline")),
+                    ),
                 ),
         )
         .into_element()
@@ -413,7 +371,6 @@ struct AccountRow {
     set_default: crate::hooks::UseSetDefaultAccount,
     remove: crate::hooks::UseRemoveAccount,
     refresh: crate::hooks::UseRefreshAccount,
-    sign_in: MicrosoftLogin,
 }
 
 impl PartialEq for AccountRow {
@@ -424,7 +381,6 @@ impl PartialEq for AccountRow {
             && self.expires == other.expires
             && self.signed_out == other.signed_out
             && self.is_default == other.is_default
-            && self.sign_in.pending == other.sign_in.pending
     }
 }
 
@@ -446,7 +402,6 @@ impl Component for AccountRow {
         // A signed-out entry has no token left to call expired
         let expired = is_microsoft && !signed_out && self.expires <= Utc::now();
         let identity_opacity = if signed_out { SIGNED_OUT_OPACITY } else { 1. };
-        let sign_in = self.sign_in.clone();
 
         let mut refreshing = use_state(|| false);
         let is_refreshing = *refreshing.read();
@@ -545,24 +500,6 @@ impl Component for AccountRow {
                             .color(colors::fg_secondary()),
                     ),
             )
-            .maybe_child(signed_out.then(|| {
-                let pending = sign_in.pending;
-                Button::new()
-                    .secondary()
-                    .enabled(!pending)
-                    .tooltip(t("oneclient.settings.accounts.sign_in_again"))
-                    .on_press(move |e: Event<PressEventData>| {
-                        e.stop_propagation();
-                        sign_in.start();
-                    })
-                    .child(Icon::new(IconType::Globe01).size(16.))
-                    .text(if pending {
-                        t("oneclient.settings.accounts.signing_in")
-                    } else {
-                        t("oneclient.settings.accounts.sign_in")
-                    })
-                    .into_element()
-            }))
             .maybe_child((is_microsoft && !signed_out).then(|| {
                 Button::new()
                     .ghost()

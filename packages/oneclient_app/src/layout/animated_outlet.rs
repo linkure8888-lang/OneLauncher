@@ -30,7 +30,6 @@ fn is_sidebar_route(route: &Route) -> bool {
             | Route::SettingsApis {}
             | Route::SettingsLanguage {}
             | Route::SettingsDeveloper {}
-            | Route::SettingsChangelog {}
     )
 }
 

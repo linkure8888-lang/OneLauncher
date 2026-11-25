@@ -5,7 +5,7 @@ use crate::hooks::{
     Actions, has_migration_data, use_dispatch, use_migration, use_onboarding_selection,
     use_settings_snapshot,
 };
-use crate::i18n::{t, tf};
+use crate::i18n::t;
 use crate::routes::Route;
 use crate::theme::{colors, rounded, text_size};
 use crate::translations;
@@ -79,7 +79,6 @@ fn language_row(
     mut chosen: State<String>,
 ) -> Element {
     let (name, _) = translations::names(code.as_deref());
-    let coverage = translations::coverage(code.as_deref());
 
     let background = if active {
         colors::brand()
@@ -117,19 +116,5 @@ fn language_row(
                     .color(colors::fg_primary()),
             ),
         )
-        .maybe_child(coverage.map(|percentage| {
-            label()
-                .text(tf(
-                    "oneclient.onboarding.language.localized",
-                    &[&percentage],
-                ))
-                .font_size(text_size(13.))
-                .color(if active {
-                    colors::fg_primary()
-                } else {
-                    colors::fg_secondary()
-                })
-                .into_element()
-        }))
         .into_element()
 }

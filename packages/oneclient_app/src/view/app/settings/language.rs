@@ -3,7 +3,7 @@ use freya::prelude::*;
 use super::settings_page;
 use crate::components::{Icon, IconType};
 use crate::hooks::{Actions, use_dispatch, use_settings_snapshot};
-use crate::i18n::{t, tf};
+use crate::i18n::t;
 use crate::theme::{colors, rounded, text_size};
 use crate::translations;
 use crate::view::app::settings::section_header;
@@ -30,7 +30,6 @@ impl Component for SettingsLanguage {
 
 fn language_row(code: Option<String>, is_selected: bool, dispatch: Actions) -> impl IntoElement {
     let (native, english) = translations::names(code.as_deref());
-    let coverage = translations::coverage(code.as_deref());
 
     rect()
         .horizontal()
@@ -66,16 +65,6 @@ fn language_row(code: Option<String>, is_selected: bool, dispatch: Actions) -> i
                         .into_element()
                 })),
         )
-        .maybe_child(coverage.map(|percentage| {
-            label()
-                .text(tf(
-                    "oneclient.onboarding.language.localized",
-                    &[&percentage],
-                ))
-                .font_size(text_size(13.))
-                .color(colors::fg_secondary())
-                .into_element()
-        }))
         .maybe_child(is_selected.then(|| {
             Icon::new(IconType::Check)
                 .size(20.)

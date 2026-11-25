@@ -11,16 +11,16 @@ use crate::layout::SettingsShell;
 use crate::view::{
     NotFound, Relocating, Startup,
     app::{
-        Clusters, Debug, Friends, Home, Servers, Skins, Stats,
+        Clusters, Home, Skins, Stats,
         browser::{Browser, BrowserPackage},
         cluster::{
             ClusterDataPacks, ClusterLogs, ClusterMods, ClusterOverview, ClusterScreenshots,
             ClusterSettings, ClusterShaders, ClusterTextures, ClusterWorlds, ProcessLogs,
         },
         settings::{
-            SettingsAccounts, SettingsApis, SettingsAppearance, SettingsChangelog,
-            SettingsDeveloper, SettingsHelp, SettingsJava, SettingsLanguage, SettingsLauncher,
-            SettingsMinecraft, SettingsStorage, SettingsThemeEditor,
+            SettingsAccounts, SettingsApis, SettingsAppearance, SettingsDeveloper, SettingsHelp,
+            SettingsJava, SettingsLanguage, SettingsLauncher, SettingsMinecraft, SettingsStorage,
+            SettingsThemeEditor,
         },
     },
     onboarding::{
@@ -65,8 +65,6 @@ pub enum Route {
             Home {},
             #[route("/app/clusters")]
             Clusters {},
-            #[route("/app/friends")]
-            Friends {},
 
             #[layout(ClusterShell)]
                 #[route("/app/clusters/:cluster_id")]
@@ -102,12 +100,8 @@ pub enum Route {
             },
             #[route("/app/skins")]
             Skins {},
-            #[route("/app/servers")]
-            Servers {},
             #[route("/app/stats")]
             Stats {},
-            #[route("/app/debug")]
-            Debug {},
 
             #[layout(SettingsShell)]
                 #[route("/app/settings/appearance")]
@@ -130,8 +124,6 @@ pub enum Route {
                 SettingsLanguage {},
                 #[route("/app/settings/developer")]
                 SettingsDeveloper {},
-                #[route("/app/settings/changelog")]
-                SettingsChangelog {},
                 #[route("/app/settings/help")]
                 SettingsHelp {},
                 // #[route("/app/settings/feedback")]
@@ -159,7 +151,6 @@ impl Route {
             Route::OnboardingSummary { .. } => t("oneclient.routes.onboarding_summary"),
             Route::Home { .. } => t("oneclient.routes.home"),
             Route::Clusters { .. } => t("oneclient.routes.clusters"),
-            Route::Friends { .. } => t("oneclient.routes.friends"),
             Route::ClusterOverview { .. } => t("oneclient.routes.cluster_overview"),
             Route::ClusterLogs { .. } => t("oneclient.routes.cluster_logs"),
             Route::ProcessLogs { .. } => t("oneclient.routes.process_logs"),
@@ -173,9 +164,7 @@ impl Route {
             Route::Browser { .. } => t("oneclient.routes.browser"),
             Route::BrowserPackage { .. } => t("oneclient.routes.browser_package"),
             Route::Skins { .. } => t("oneclient.routes.skins"),
-            Route::Servers { .. } => t("oneclient.routes.servers"),
             Route::Stats { .. } => t("oneclient.routes.stats"),
-            Route::Debug { .. } => t("oneclient.routes.debug"),
             Route::SettingsAppearance { .. } => t("oneclient.routes.settings_appearance"),
             Route::SettingsThemeEditor { .. } => t("oneclient.routes.settings_theme_editor"),
             Route::SettingsMinecraft { .. } => t("oneclient.routes.settings_minecraft"),
@@ -186,7 +175,6 @@ impl Route {
             Route::SettingsApis { .. } => t("oneclient.routes.settings_apis"),
             Route::SettingsLanguage { .. } => t("oneclient.routes.settings_language"),
             Route::SettingsDeveloper { .. } => t("oneclient.routes.settings_developer"),
-            Route::SettingsChangelog { .. } => t("oneclient.routes.settings_changelog"),
             Route::SettingsHelp { .. } => t("oneclient.routes.settings_help"),
             // Route::SettingsFeedback { .. } => "Feedback".to_string(),
             Route::NotFound { .. } => t("oneclient.routes.not_found"),

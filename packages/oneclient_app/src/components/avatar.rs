@@ -15,7 +15,6 @@ const HEAD_OVERLAY: (f32, f32) = (40., 8.);
 pub struct Avatar {
     uuid: String,
     size: f32,
-    radius: Option<f32>,
     layout: LayoutData,
 }
 
@@ -24,19 +23,8 @@ impl Avatar {
         Self {
             uuid: uuid.into(),
             size: AVATAR_SIZE,
-            radius: None,
             layout: LayoutData::default(),
         }
-    }
-
-    pub fn size(mut self, size: f32) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = Some(radius);
-        self
     }
 }
 
@@ -70,7 +58,7 @@ impl Component for Avatar {
             }
         };
 
-        let radius = rounded(self.radius.unwrap_or(self.size / 4.));
+        let radius = rounded(self.size / 4.);
         let mut nudge = use_state(|| (0f32, 0f32));
         let inset = (self.size - face) / 2.;
         let (dx, dy) = *nudge.read();

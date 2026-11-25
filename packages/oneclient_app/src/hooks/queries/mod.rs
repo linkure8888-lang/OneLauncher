@@ -13,7 +13,6 @@ mod analytics;
 mod auth;
 mod bisect;
 mod bundles;
-mod changelog;
 mod cluster_content;
 mod clusters;
 mod disable_warnings;
@@ -45,15 +44,12 @@ pub use analytics::{
     try_cluster_analytics, try_global_analytics, use_cluster_analytics, use_global_analytics,
 };
 pub use auth::{
-    AddOfflineAccountKeys, BeginMicrosoftLoginMutation, CancelMicrosoftLoginKeys,
-    CancelMicrosoftLoginMutation, FinishMicrosoftLoginMutation, RefreshAccountKeys,
-    RemoveAccountKeys, SetDefaultAccountKeys, UseRefreshAccount, UseRemoveAccount,
-    UseSetDefaultAccount, invalidate_auth_queries, login_code_already_handled, mutation_error,
-    mutation_is_pending, mutation_is_running, mutation_ok, reset_login_code_dedup, try_account,
-    try_accounts, try_default_account, use_account, use_accounts, use_add_microsoft_account,
-    use_add_offline_account, use_begin_microsoft_login, use_cancel_microsoft_login,
-    use_current_account, use_default_account, use_finish_microsoft_login, use_refresh_account,
-    use_refresh_all_accounts, use_remove_account, use_set_default_account,
+    AddOfflineAccountKeys, RefreshAccountKeys, RemoveAccountKeys, SetDefaultAccountKeys,
+    UseRefreshAccount, UseRemoveAccount, UseSetDefaultAccount, invalidate_auth_queries,
+    login_code_already_handled, mutation_error, mutation_is_pending, mutation_is_running,
+    mutation_ok, reset_login_code_dedup, try_account, try_accounts, try_default_account,
+    use_account, use_accounts, use_add_offline_account, use_current_account, use_default_account,
+    use_refresh_account, use_refresh_all_accounts, use_remove_account, use_set_default_account,
 };
 pub use bisect::{BisectAction, BisectMutation, use_bisect, use_bisect_mutation};
 pub use bundles::{
@@ -61,10 +57,6 @@ pub use bundles::{
     bundle_overrides_map, bundles_with_status_items, imported_modpacks_list, modpack_sources_map,
     onboarding_bundles_items, use_available_bundles, use_bundle_overrides, use_bundle_updates,
     use_bundles_with_status, use_imported_modpacks, use_modpack_sources, use_onboarding_bundles,
-};
-pub use changelog::{
-    changelog_entries, changelog_error, changelog_is_loading, latest_changelog_version,
-    use_changelog,
 };
 pub use cluster_content::{
     cluster_content_items, use_cluster_content, use_migratable_routes, use_mods_folder_sync,

@@ -13,12 +13,7 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 mod custom_servers;
-mod servers_analytics;
 pub use custom_servers::{load_custom_servers, remove_custom_server, save_custom_server};
-pub use servers_analytics::{
-    ServerAnalyticsStore, ServerClickRecord, get_clicks_last_30_days, record_server_click,
-    upload_analytics_stub,
-};
 
 use serde::{Deserialize, Serialize};
 
@@ -218,6 +213,7 @@ pub async fn ping(entry: &ServerEntry) -> Option<u32> {
 
 /// The `(host, port)` pair handed to `TcpStream::connect`. Kept as a function so
 /// tests can check IPv6 literals and host:port input without opening a socket.
+#[cfg(test)]
 fn connection_target(entry: &ServerEntry) -> (&str, u16) {
     (entry.address.as_str(), entry.port)
 }

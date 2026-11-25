@@ -143,41 +143,6 @@ impl App for OneClientApp {
 fn main() {
     let cli = cli::parse();
 
-    match cli.friends_cmd {
-        cli::FriendsCommand::List => {
-            match oneclient_social::load_friends() {
-                Ok(friends) => {
-                    println!("=== Local Friends ({}) ===", friends.len());
-                    for f in friends {
-                        println!(
-                            "- {} (UUID: {}, Last Seen: {})",
-                            f.nickname, f.uuid, f.last_seen
-                        );
-                    }
-                }
-                Err(e) => eprintln!("Error loading friends: {}", e),
-            }
-            return;
-        }
-        cli::FriendsCommand::Add { nickname, uuid } => {
-            match oneclient_social::add_friend(&nickname, &uuid) {
-                Ok(()) => println!("Successfully added/updated friend: {} ({})", nickname, uuid),
-                Err(e) => eprintln!("Error adding friend: {}", e),
-            }
-            return;
-        }
-        cli::FriendsCommand::Remove { uuid } => {
-            match oneclient_social::remove_friend(&uuid) {
-                Ok(()) => println!("Successfully removed friend with UUID: {}", uuid),
-                Err(e) => eprintln!("Error removing friend: {}", e),
-            }
-            return;
-        }
-        cli::FriendsCommand::None => {}
-    }
-
-    oneclient_social::init_social_subsystem();
-
     let portable = oneclient_app::portable::init(cli.portable);
 
     let mut builder = Builder::new_multi_thread();
@@ -301,7 +266,6 @@ fn main() {
         if oneclient_core::relocate::in_progress() {
             tracing::warn!("close request ignored, the data folder is still being moved");
         } else {
-            oneclient_app::close_chat_window();
             ipc::send(ipc::IpcCommand::Close);
         }
         CloseDecision::KeepOpen

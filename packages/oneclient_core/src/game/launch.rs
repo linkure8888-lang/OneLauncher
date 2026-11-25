@@ -440,6 +440,11 @@ async fn start(
         tracing::warn!(cluster_id, error = %err, "failed to write allowed_symlinks.txt");
     }
 
+    // The companion screens follow the launcher language, not the game language.
+    // The guard cannot be held across the await, so the value is cloned out first.
+    let launcher_language = state.settings.read().language.clone();
+    crate::game::sync_companion_language(&cwd, launcher_language.as_deref()).await;
+
     let custom_args = profile.launch_args.clone().unwrap_or_default();
     let loader_version_id = loader_version.as_ref().map(|lv| lv.id.as_str());
 

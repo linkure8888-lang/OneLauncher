@@ -4,7 +4,7 @@ use freya::query::{
     Mutation, MutationCapability, MutationStateData, QueriesStorage, Query, QueryCapability,
     UseMutation, UseQuery, use_mutation, use_query,
 };
-use oneclient_auth::{MicrosoftLoginSession, MinecraftAccount};
+use oneclient_auth::MinecraftAccount;
 use oneclient_core::LauncherError;
 use uuid::Uuid;
 
@@ -127,88 +127,6 @@ pub async fn invalidate_auth_queries(account_id: Option<Uuid>) {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct BeginMicrosoftLoginMutation;
-
-impl MutationCapability for BeginMicrosoftLoginMutation {
-    type Ok = MicrosoftLoginSession;
-    type Err = LauncherError;
-    type Keys = ();
-
-    async fn run(&self, _keys: &Self::Keys) -> Result<Self::Ok, Self::Err> {
-        Ok(crate::launcher::state()?
-            .auth
-            .begin_microsoft_login()
-            .await?)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FinishMicrosoftLoginMutation;
-
-impl MutationCapability for FinishMicrosoftLoginMutation {
-    type Ok = MinecraftAccount;
-    type Err = LauncherError;
-    type Keys = MicrosoftLoginSession;
-
-    async fn run(&self, flow: &Self::Keys) -> Result<Self::Ok, Self::Err> {
-        Ok(crate::launcher::state()?
-            .auth
-            .finish_microsoft_login(flow.clone())
-            .await?)
-    }
-
-    async fn on_settled(&self, _keys: &Self::Keys, result: &Result<Self::Ok, Self::Err>) {
-        if let Ok(account) = result {
-            invalidate_auth_queries(Some(account.id)).await;
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct CancelMicrosoftLoginMutation;
-
-/// Keyed by the session's CSRF state token
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CancelMicrosoftLoginKeys {
-    pub state_token: String,
-}
-
-impl MutationCapability for CancelMicrosoftLoginMutation {
-    type Ok = ();
-    type Err = LauncherError;
-    type Keys = CancelMicrosoftLoginKeys;
-
-    async fn run(&self, keys: &Self::Keys) -> Result<Self::Ok, Self::Err> {
-        crate::launcher::state()?
-            .auth
-            .cancel_microsoft_login(&keys.state_token)
-            .await;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct AddMicrosoftAccountMutation;
-
-impl MutationCapability for AddMicrosoftAccountMutation {
-    type Ok = MinecraftAccount;
-    type Err = LauncherError;
-    type Keys = ();
-
-    async fn run(&self, _keys: &Self::Keys) -> Result<Self::Ok, Self::Err> {
-        let state = crate::launcher::state()?;
-        let flow = state.auth.begin_microsoft_login().await?;
-        Ok(state.auth.finish_microsoft_login(flow).await?)
-    }
-
-    async fn on_settled(&self, _keys: &Self::Keys, result: &Result<Self::Ok, Self::Err>) {
-        if let Ok(account) = result {
-            invalidate_auth_queries(Some(account.id)).await;
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AddOfflineAccountMutation;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -235,28 +153,6 @@ impl MutationCapability for AddOfflineAccountMutation {
     }
 }
 
-async fn leave_party_before_sign_out(auth: std::sync::Arc<oneclient_auth::AuthService>, id: Uuid) {
-    let left = crate::launcher::off_ui(async move {
-        tokio::time::timeout(SIGN_OUT_LEAVE_LIMIT, async {
-            let account = auth
-                .account_for_launch(id)
-                .await
-                .map_err(|err| err.to_string())?;
-            oneclient_polyplus::party::leave_for_sign_out(&account)
-                .await
-                .map_err(|err| err.to_string())
-        })
-        .await
-        .map_err(|_| "timed out".to_string())
-        .and_then(|left| left)
-    })
-    .await;
-
-    if let Err(err) = left {
-        tracing::warn!(%id, "could not leave the party before signing out: {err}");
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RemoveAccountMutation;
 
@@ -272,7 +168,6 @@ impl MutationCapability for RemoveAccountMutation {
 
     async fn run(&self, keys: &Self::Keys) -> Result<Self::Ok, Self::Err> {
         let state = crate::launcher::state()?;
-        leave_party_before_sign_out(state.auth.clone(), keys.id).await;
         Ok(state.auth.remove_account(keys.id).await?)
     }
 
@@ -360,22 +255,6 @@ impl MutationCapability for RefreshAllAccountsMutation {
 pub type UseSetDefaultAccount = UseMutation<SetDefaultAccountMutation>;
 pub type UseRemoveAccount = UseMutation<RemoveAccountMutation>;
 pub type UseRefreshAccount = UseMutation<RefreshAccountMutation>;
-
-pub fn use_begin_microsoft_login() -> UseMutation<BeginMicrosoftLoginMutation> {
-    use_mutation(Mutation::new(BeginMicrosoftLoginMutation))
-}
-
-pub fn use_finish_microsoft_login() -> UseMutation<FinishMicrosoftLoginMutation> {
-    use_mutation(Mutation::new(FinishMicrosoftLoginMutation))
-}
-
-pub fn use_cancel_microsoft_login() -> UseMutation<CancelMicrosoftLoginMutation> {
-    use_mutation(Mutation::new(CancelMicrosoftLoginMutation))
-}
-
-pub fn use_add_microsoft_account() -> UseMutation<AddMicrosoftAccountMutation> {
-    use_mutation(Mutation::new(AddMicrosoftAccountMutation))
-}
 
 pub fn use_add_offline_account() -> UseMutation<AddOfflineAccountMutation> {
     use_mutation(Mutation::new(AddOfflineAccountMutation))

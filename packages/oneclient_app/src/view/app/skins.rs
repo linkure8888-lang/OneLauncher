@@ -10,6 +10,7 @@ use crate::hooks::{
     use_skin_library,
 };
 use crate::i18n::t;
+use crate::platform::open_url;
 use crate::theme::{colors, rounded, text_size};
 use crate::ui::border_all_color;
 
@@ -141,10 +142,109 @@ impl Component for Skins {
                                             ),
                                     ),
                             )
-                            .child(body),
+                            .child(
+                                rect()
+                                    .vertical()
+                                    .width(Size::fill())
+                                    .spacing(12.)
+                                    .child(section_header(t("oneclient.skins.section").to_string()))
+                                    .child(body),
+                            )
+                            .child(cosmetics_section()),
                     ),
             )
     }
+}
+
+fn section_header(title: String) -> Element {
+    label()
+        .text(title)
+        .font_size(text_size(16.))
+        .font_weight(FontWeight::BOLD)
+        .color(colors::fg_primary())
+        .into_element()
+}
+
+/// Placeholder row for the future cosmetics section: what is coming and how to support the
+/// project while it is not there yet.
+fn cosmetics_section() -> Element {
+    let support = move |_: Event<PressEventData>| {
+        open_url("https://t.me/remixclient_ru");
+    };
+
+    rect()
+        .vertical()
+        .width(Size::fill())
+        .spacing(12.)
+        .child(section_header(
+            t("oneclient.appearance.cosmetics_section").to_string(),
+        ))
+        .child(
+            rect()
+                .horizontal()
+                .width(Size::fill())
+                .content(Content::wrap_spacing(16.))
+                .child(
+                    rect()
+                        .vertical()
+                        .width(Size::px(CARD_WIDTH * 2.))
+                        .spacing(8.)
+                        .padding(Gaps::new_all(16.))
+                        .corner_radius(rounded(12.))
+                        .background(colors::page_elevated())
+                        .border(border_all_color(1., colors::component_border()))
+                        .child(
+                            Icon::new(IconType::PaintPour)
+                                .size(24.)
+                                .color(colors::brand()),
+                        )
+                        .child(
+                            label()
+                                .text(t("oneclient.cosmetics.soon.title"))
+                                .font_size(text_size(14.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .color(colors::fg_primary()),
+                        )
+                        .child(
+                            label()
+                                .text(t("oneclient.cosmetics.soon.body"))
+                                .font_size(text_size(12.))
+                                .color(colors::fg_secondary()),
+                        ),
+                )
+                .child(
+                    rect()
+                        .vertical()
+                        .width(Size::px(CARD_WIDTH * 2.))
+                        .spacing(8.)
+                        .padding(Gaps::new_all(16.))
+                        .corner_radius(rounded(12.))
+                        .background(colors::page_elevated())
+                        .border(border_all_color(1., colors::component_border()))
+                        .child(Icon::new(IconType::Send01).size(24.).color(colors::brand()))
+                        .child(
+                            label()
+                                .text(t("oneclient.cosmetics.support.title"))
+                                .font_size(text_size(14.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .color(colors::fg_primary()),
+                        )
+                        .child(
+                            label()
+                                .text(t("oneclient.cosmetics.support.body"))
+                                .font_size(text_size(12.))
+                                .color(colors::fg_secondary()),
+                        )
+                        .child(
+                            Button::new()
+                                .primary()
+                                .small()
+                                .on_press(support)
+                                .text(t("oneclient.cosmetics.support.open")),
+                        ),
+                ),
+        )
+        .into_element()
 }
 
 fn empty_state() -> Element {

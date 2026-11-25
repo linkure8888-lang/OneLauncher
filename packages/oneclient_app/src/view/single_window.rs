@@ -45,22 +45,6 @@ impl SingleWindow {
     pub fn forget(&self) {
         *self.state() = WindowState::Closed;
     }
-
-    pub fn take(&self) -> Option<WindowId> {
-        let mut state = self.state();
-
-        match *state {
-            WindowState::Open(id) => {
-                *state = WindowState::Closed;
-                Some(id)
-            }
-            _ => None,
-        }
-    }
-
-    pub fn is_open(&self) -> bool {
-        matches!(*self.state(), WindowState::Open(_))
-    }
 }
 
 pub struct OpeningGuard(&'static SingleWindow);

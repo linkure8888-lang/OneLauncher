@@ -32,7 +32,6 @@ pub enum NotificationActionKind {
     OpenClusterUpdate(Vec<ClusterUpdateSummary>),
     /// Routed through the link confirm popup rather than opened straight away
     OpenUrl(String),
-    OpenChat(Option<i32>),
 }
 
 /// Carries core updates whole not a display projection the modal's Update button
@@ -722,8 +721,6 @@ impl NotificationState {
                     },
                 );
             }
-            Event::Chat(_) => {}
-
             Event::Progress(ProgressEvent::Update { id, .. })
                 if id == oneclient_auth::MICROSOFT_LOGIN_PROGRESS => {}
             Event::Progress(ProgressEvent::Update { id, .. })
@@ -788,22 +785,6 @@ impl NotificationState {
             .iter()
             .filter(|e| e.dismissable())
             .map(|e| e.id)
-            .collect();
-        for id in ids {
-            self.forget_entry(inbox, id);
-        }
-    }
-
-    pub fn clear_chat_notices(&mut self, inbox: &mut Vec<InboxEntry>) {
-        let ids: Vec<u64> = inbox
-            .iter()
-            .filter(|entry| {
-                entry
-                    .actions
-                    .iter()
-                    .any(|action| matches!(action.kind, NotificationActionKind::OpenChat(_)))
-            })
-            .map(|entry| entry.id)
             .collect();
         for id in ids {
             self.forget_entry(inbox, id);
