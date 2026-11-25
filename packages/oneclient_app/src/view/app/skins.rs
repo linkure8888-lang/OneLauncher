@@ -172,6 +172,24 @@ fn cosmetics_section() -> Element {
         open_url("https://t.me/remixclient_ru");
     };
 
+    let item_chip = |icon: IconType, label_text: &'static str| {
+        rect()
+            .horizontal()
+            .spacing(6.)
+            .padding(Gaps::new_all(8.))
+            .cross_align(Alignment::Center)
+            .corner_radius(rounded(8.))
+            .background(colors::component_bg())
+            .border(border_all_color(1., colors::component_border()))
+            .child(Icon::new(icon).size(16.).color(colors::fg_secondary()))
+            .child(
+                label()
+                    .text(label_text)
+                    .font_size(text_size(12.))
+                    .color(colors::fg_secondary()),
+            )
+    };
+
     rect()
         .vertical()
         .width(Size::fill())
@@ -188,28 +206,69 @@ fn cosmetics_section() -> Element {
                     rect()
                         .vertical()
                         .width(Size::px(CARD_WIDTH * 2.))
-                        .spacing(8.)
+                        .spacing(10.)
                         .padding(Gaps::new_all(16.))
                         .corner_radius(rounded(12.))
                         .background(colors::page_elevated())
                         .border(border_all_color(1., colors::component_border()))
                         .child(
-                            Icon::new(IconType::PaintPour)
-                                .size(24.)
-                                .color(colors::brand()),
-                        )
-                        .child(
-                            label()
-                                .text(t("oneclient.cosmetics.soon.title"))
-                                .font_size(text_size(14.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .color(colors::fg_primary()),
+                            rect()
+                                .horizontal()
+                                .spacing(8.)
+                                .cross_align(Alignment::Center)
+                                .child(
+                                    Icon::new(IconType::PaintPour)
+                                        .size(20.)
+                                        .color(colors::brand()),
+                                )
+                                .child(
+                                    label()
+                                        .text(t("oneclient.cosmetics.soon.title"))
+                                        .font_size(text_size(14.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .color(colors::fg_primary()),
+                                ),
                         )
                         .child(
                             label()
                                 .text(t("oneclient.cosmetics.soon.body"))
                                 .font_size(text_size(12.))
                                 .color(colors::fg_secondary()),
+                        )
+                        .child(
+                            rect()
+                                .horizontal()
+                                .spacing(8.)
+                                .child(item_chip(
+                                    IconType::Cape,
+                                    t("oneclient.cosmetics.item.cape"),
+                                ))
+                                .child(item_chip(
+                                    IconType::Wings,
+                                    t("oneclient.cosmetics.item.wings"),
+                                ))
+                                .child(item_chip(IconType::Hat, t("oneclient.cosmetics.item.hat")))
+                                .child(
+                                    rect()
+                                        .horizontal()
+                                        .spacing(6.)
+                                        .padding(Gaps::new_all(8.))
+                                        .cross_align(Alignment::Center)
+                                        .corner_radius(rounded(8.))
+                                        .background(colors::component_bg())
+                                        .child(
+                                            Icon::new(IconType::Coin)
+                                                .size(16.)
+                                                .color(colors::brand()),
+                                        )
+                                        .child(
+                                            label()
+                                                .text(t("oneclient.cosmetics.coin"))
+                                                .font_size(text_size(12.))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .color(colors::brand()),
+                                        ),
+                                ),
                         ),
                 )
                 .child(
