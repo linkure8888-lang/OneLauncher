@@ -149,6 +149,27 @@ pub async fn list_distinct_version_loaders(
     .await
 }
 
+/// Removes the whole bundle catalog and every per-cluster bundle choice. Used
+/// to retire bundles for good: the cards disappear from the UI and nothing
+/// re-installs them, while clusters the player already made stay untouched.
+/// Plain (non-macro) queries: the check does not depend on the offline schema.
+pub async fn purge_catalog(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    // The table names are compile-time constants, never user input, so the
+    // dynamic-string audit concern does not apply here.
+    #[allow(clippy::disallowed_methods, unknown_lints)]
+    sqlx::query("DELETE FROM bundles").execute(pool).await?;
+    sqlx::query("DELETE FROM cluster_bundle_choices")
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM cluster_bundle_overrides")
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM cluster_bundle_type_opt_outs")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list_all(pool: &SqlitePool) -> Result<Vec<BundleRow>, sqlx::Error> {
     sqlx::query_as!(
         BundleRow,

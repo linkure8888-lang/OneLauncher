@@ -2195,8 +2195,8 @@
   "oneclient.skins.section": "Скины",
   "oneclient.appearance.cosmetics_section": "Косметика",
   "oneclient.cosmetics.soon.title": "Скоро здесь",
-  "oneclient.cosmetics.soon.body": "Плащи, шляпы, крылья и другая косметика появятся в будущих обновлениях.",
-  "oneclient.cosmetics.support.title": "Поддержать автора 😅",
-  "oneclient.cosmetics.support.body": "RemixClient бесплатный. Донаты идут на косметику и кофе, а не на платные фичи.",
+  "oneclient.cosmetics.soon.body": "Плащи, шляпы, крылья и другая косметика появятся в будущих обновлениях — покупка за Remix Coin, на честную игру это не влияет.",
+  "oneclient.cosmetics.support.title": "Поддержать автора",
+  "oneclient.cosmetics.support.body": "RemixClient бесплатный. Донаты идут на косметику, кофе и сервер, а не на платные фичи.",
   "oneclient.cosmetics.support.open": "Открыть Telegram"
 }

@@ -92,104 +92,15 @@ impl BundlesManager {
 
     #[tracing::instrument(skip_all)]
     pub async fn sync(self: &Arc<Self>, ctx: &ContentCtx) -> ContentResult<bool> {
-        let syncing = Arc::clone(&self.syncing).lock_owned().await;
-
-        let Some(fetched) = Self::fetch_manifest(ctx).await? else {
-            tracing::debug!(
-                "skipping bundle sync because no remote or cached manifest is available"
-            );
-            return Ok(false);
-        };
-        let FetchedManifest {
-            manifest,
-            changed: manifest_changed,
-            etag,
-        } = fetched;
-        *self.manifest.write().await = manifest.clone();
-        self.archive_cache.write().await.clear();
-
-        if !manifest_changed {
-            tracing::debug!("bundles manifest unchanged; skipping per-bundle remote checks");
-            return Ok(false);
-        }
-
-        let entries: Vec<RemoteBundleRef> = manifest
-            .remote_paths()
-            .into_iter()
-            .filter(|entry| {
-                let known = GameLoader::from_str(&entry.loader).is_ok();
-                if !known {
-                    tracing::warn!(
-                        remote_path = %entry.remote_path,
-                        loader = %entry.loader,
-                        "skipping a bundle for an unknown loader"
-                    );
-                }
-                known
-            })
-            .collect();
-        let remote_paths: Vec<String> = entries
-            .iter()
-            .map(|entry| entry.remote_path.clone())
-            .collect();
-
-        if remote_paths.is_empty() {
-            tracing::error!("bundle catalog listed no bundles; keeping the previous catalog");
-            return Ok(false);
-        }
-
-        let bundles_root = paths::bundles_dir()?;
-        polyio::create_dir_all(&bundles_root.join("bundles")).await?;
-
-        let mut staged = Vec::new();
-        let mut staged_all = true;
-        for entry in &entries {
-            let archive = archive_file_name(entry, &entries);
-            match Self::stage_bundle(entry, &archive, ctx, &bundles_root).await {
-                Ok(bundle) => staged.push(bundle),
-                Err(err) => {
-                    staged_all = false;
-                    tracing::warn!(
-                        remote_path = %entry.remote_path,
-                        error = %err,
-                        "failed to sync bundle"
-                    );
-                }
-            }
-        }
-
-        if !staged_all {
-            tracing::warn!(
-                "bundle catalog incomplete; keeping the previous catalog and not caching \
-                 the manifest etag so the next sync retries"
-            );
-            return Ok(false);
-        }
-
-        let bundles = Arc::clone(self);
-        let publishing = ctx.clone();
-        let published_all = tokio::spawn(async move {
-            let _syncing = syncing;
-            bundles.publish(staged, &remote_paths, &publishing).await
-        })
-        .await
-        .map_err(|err| ContentError::InvalidData {
-            reason: format!("bundle catalog publish stopped: {err}"),
-        })??;
-
-        if published_all {
-            if let Some(etag) = etag {
-                let manifest_path = paths::bundles_dir()?.join("metadata.json");
-                oneclient_net::commit_etag(&manifest_path, &etag).await;
-            }
-        } else {
-            tracing::warn!(
-                "bundle catalog partly published; not caching the manifest etag so the \
-                 next sync retries the missing bundles"
-            );
-        }
-
-        Ok(true)
+        // The bundle catalog is retired for good: it was served from a third
+        // party and presented pre-made modpacks the player never asked for.
+        // Every sync wipes the local catalog so no bundle card can come back,
+        // while clusters the player already created stay untouched.
+        bundle_dao::purge_catalog(&ctx.db)
+            .await
+            .map_err(|err| tracing::warn!(error = %err, "bundle catalog purge failed"))
+            .ok();
+        return Ok(false);
     }
 
     pub async fn cache_archive_manifest(

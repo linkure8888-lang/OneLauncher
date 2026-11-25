@@ -2195,8 +2195,8 @@
   "oneclient.skins.section": "Skins",
   "oneclient.appearance.cosmetics_section": "Cosmetics",
   "oneclient.cosmetics.soon.title": "Coming soon",
-  "oneclient.cosmetics.soon.body": "Capes, hats, wings and other cosmetics will land in a future update.",
-  "oneclient.cosmetics.support.title": "Support the author 😅",
-  "oneclient.cosmetics.support.body": "RemixClient is free. Donations go to cosmetics and coffee, never to paywalled features.",
+  "oneclient.cosmetics.soon.body": "Capes, hats, wings and other cosmetics will land in a future update — bought with Remix Coin, never affecting fair play.",
+  "oneclient.cosmetics.support.title": "Support the author",
+  "oneclient.cosmetics.support.body": "RemixClient is free. Donations go to cosmetics, coffee and servers, never to paywalled features.",
   "oneclient.cosmetics.support.open": "Open Telegram"
 }

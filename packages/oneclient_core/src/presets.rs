@@ -454,6 +454,11 @@ fn total_ram_mb() -> u64 {
 }
 
 /// `(adapter name, refresh rate)`.
+///
+/// Emulators (MuMu, BlueStacks, …) register virtual display adapters that show
+/// up first in `Win32_VideoController` and report nonsense (16 Hz, no real
+/// VRAM). Skip anything virtual and prefer the controller driving the biggest
+/// active screen — that is the card the game will actually render on.
 fn query_adapter() -> (Option<String>, Option<u32>) {
     #[cfg(windows)]
     {
@@ -462,7 +467,7 @@ fn query_adapter() -> (Option<String>, Option<u32>) {
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                "Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Basic|Remote' } | Select-Object -First 1 Name,CurrentRefreshRate | ConvertTo-Json -Compress",
+                "Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Virtual|virtual|MuMu|BlueStacks|LDPlayer|Nox|MEmu|SmartGaGa|Genymotion|Basic|Remote|Hyper-V|Indirect' } | Sort-Object -Property @{Expression='CurrentHorizontalResolution';Descending=$true} | Select-Object -First 1 Name,CurrentRefreshRate | ConvertTo-Json -Compress",
             ])
             .output()
             .ok();
