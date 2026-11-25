@@ -17,7 +17,7 @@ license = "GPL-3.0-only"
 readme = "README.md"
 repository = "https://github.com/linkure8888-lang/OneLauncher"
 rust-version = "1.97"
-version = "2.11.5"
+version = "2.12.0"
 
 [workspace.dependencies]
 # core
@@ -34,7 +34,6 @@ oneclient_macro = {path = "./packages/oneclient_macro"}
 oneclient_mc = {path = "./packages/oneclient_mc"}
 oneclient_net = {path = "./packages/oneclient_net"}
 oneclient_polyplus = {path = "./packages/oneclient_polyplus"}
-oneclient_social = {path = "./packages/oneclient_social"}
 polyio = {path = "./packages/polyio"}
 
 # core (extra)

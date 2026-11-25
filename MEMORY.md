@@ -36,7 +36,7 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 | Updater | done (endpoint pending) | Endpoint `https://github.com/linkure8888-lang/OneLauncher/releases/latest/download/latest.json`; new minisign key pair generated |
 | Linux/mac packaging | partial | IDs renamed to `org.remixclient.RemixClient`; macOS `OneClient.icon` assets remain; untested |
 | App icon | done | Real design from the user's image (`design/icon-source.jpg`): transparent master `C:\Users\user\Desktop\remix-icon.png` → PNG set, `icon.ico` (16–256), `icon.icns` (16–1024), tray, StoreLogo. Generator: `%TEMP%\remix-icon-tool` (Rust + `image`) |
-| HUD (axe/sword/totem + presets) | researched, blocked on decision | See "HUD research" below. No existing mod covers the combo; own companion mod recommended. Needs: target version + loader |
+| HUD (axe/sword/totem + presets) | done in `companion/`, not shipped | Movable HUD modules + on-screen editor, see "Companion mod" below. Still missing the launcher-side install |
 | QA sandbox | research | Subagent researching Windows Sandbox / separate desktop / UI automation |
 
 ## Keys, secrets and endpoints
@@ -54,14 +54,54 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 - Discord RPC only works while the Discord desktop client is running and logged in.
   There is no server component.
 
-## Companion mod (paused until 3.0.0)
+## Companion mod (source ready, not shipped)
 
 The launcher does **not** install `companion/`; no Rust code references it. It was only
 copied by hand into the QA sandbox and has been removed from there. Decision 2026-11-15:
-keep the source (HUD + Right Alt screen, 4 files) for the 3.0.0 redesign, but do not ship
-it — everything it shows already exists in the bundle (armor: `DetailArmorBarReconstructed`),
-and the extra Right Alt hotkey confuses players. OneConfig and the eight `poly*` mods stay
-for now; `polydium` has **no license field**, so it must never be rebuilt or rebranded.
+keep the source for the 3.0.0 redesign, but do not ship it — everything it showed then
+already exists in the bundle (armor: `DetailArmorBarReconstructed`), and the extra Right Alt
+hotkey confuses players. OneConfig and the eight `poly*` mods stay for now; `polydium` has
+**no license field**, so it must never be rebuilt or rebranded.
+
+2026-11-21: the mod grew into a module set modelled on the feature list of the paid
+**Pulse Visuals** client — own code, own look, no assets or branding taken from it (and we
+will never copy its paid-subscription model; the project stays free). What is in now:
+keystrokes with CPS, keybinds panel (sneak/sprint/offhand), target HUD (name/HP/armor/
+distance), potion timers, watermark (FPS/ping/coords), custom crosshair (gap/length/
+thickness/dot/outline, tints on a living target), hit particles on the hit point (gold burst
+on crit) via `ClientPreAttackCallback`, jump circles as a client-side particle ring, and a
+full-brightness toggle on **B**. All of it is Fabric events only except the crosshair, which
+needs `mixin/HudMixin.java` to cancel `Hud.extractCrosshair`; the mixin config is
+`required: false` and the custom crosshair refuses to draw until the mixin has actually
+hidden the vanilla one, so a failed mixin degrades to the vanilla crosshair.
+
+Deliberately not copied from Pulse: **damage numbers** (the client never sees the damage a
+hit dealt, so any number would be invented) and **AutoFish** (a client-side autoclicker on
+the fishing bobber breaks server rules and gets accounts banned).
+
+2026-11-21 (later): our own settings panel was thrown away — it was our design, it looked
+bad, and the player asked for OneConfig-style layout editing instead. Nothing of it is
+left: `RemixSettingsScreen` is deleted, and Right Alt now opens `RemixHudEditorScreen`.
+Each module implements `RemixModule` (id, title, enable flag, unscaled size, local-origin
+render, default origin) and the HUD applies `placements.<id>.{x,y,scale}` around it:
+**right-drag** moves, **wheel** scales (0.5–2.5x), **left-click** toggles, **R** resets the
+layout, **Esc** saves. The crosshair is `movable() == false` — it always sits on the
+crosshair position, but it still scales with the wheel.
+
+Why not the real OneConfig: 1.6.1 does ship a 26.3 Fabric build, but it drags in Compose
+Multiplatform + Fabric Language Kotlin and the whole Polyfrost stack, which the 3.0 plan is
+moving away from, and `CLAUDE.md` bans Polyfrost references in the product. So the editor
+reproduces the interaction, not the dependency. If the real integration is ever wanted it
+is a separate decision, not a drop-in.
+
+Not done yet (needs world-render mixins, not HUD events): tracer lines, jump circles, hit
+particles, hitbox customizer, custom hand, aspect ratio, scope overlay. Also `build.gradle`
+now sets `useLegacyMixinAp = false`: the legacy mixin AP cannot map names in an
+unobfuscated game and fails the build.
+
+Still open: nothing installs the jar into instances. Next step is launcher-side install
+(bundle entry, path `mods/remix-companion-<version>.jar`, Fabric loader required) plus an
+in-game test — none of the above has been launched in a real client yet.
 
 ## Telegram
 
@@ -291,3 +331,119 @@ Publishing the server requires more before it is safe: the secret must never go
 over plaintext to a remote host, so a public gate needs TLS, an explicit opt-in in
 the server catalogue, and probably per-account identities instead of one install
 secret (today two offline accounts on the same install share it).
+
+## 2026-11-24 — OneConfig integration, new mods, launcher fixes
+
+**This section supersedes the older "Companion mod" notes about avoiding OneConfig.**
+The player asked for the real OneConfig look; it is now our settings host. Rule:
+**always read this file before working on the project.**
+
+### Companion mod (shipped into both clusters)
+- `RemixConfig` extends OneConfig's `Config`: the annotated fields render as the
+  "Remix Client" page (categories HUD / Visuals). Storage stays
+  `<gamedir>/config/remix-companion.json` (the launcher writes `language` there);
+  OneConfig's own store mirrors it via the overridden `save()`. Unannotated fields
+  (`language`, `placements`) are invisible to OneConfig on purpose.
+- Compile-only API jars: `companion/libs/{config,config-impl,ui}-1.6.2.jar`
+  (extracted from the installed OneConfig jar; never shaded). `fabric.mod.json`
+  now hard-depends on `oneconfig`.
+- Keys: **Right Alt or Right Shift** open the OneConfig GUI (`OneConfigUI.INSTANCE.open()`),
+  **B** full brightness (also a page switch), **G** zoom (hold; C is taken by Zoomify),
+  **H** HUD editor. The old `RemixMenuScreen`/`RemixSettingsScreen` were deleted.
+- `RemixDescriptions` rewrites our page's description metadata to Russian on the first
+  tick when the launcher language is Russian (titles stay English by player decision).
+  OneConfig resolves `titleKey`/`descriptionKey` through the vanilla language map, so
+  metadata rewriting is the only way to follow the launcher language.
+- Russian text of `RemixLang` pruned to `editor.*` + `module.*` only.
+
+### Launcher
+- Navbar logo is always visible now (was hidden below 1280px window width).
+- Changelog fetches `linkure8888-lang/OneLauncher` releases; when unreachable it
+  shows a bundled 2.11.5 entry, never upstream Polyfrost history.
+- Translations: only English (source) + bundled Russian; the Polyfrost CDN
+  (`translations.r2.polyfrost.org`) and the coverage ("26% localized") badge are gone.
+- Donate row in Help shows a toast instead of opening a URL (payment methods pending).
+
+### Mods installed into both clusters (Modrinth, fabric 26.3)
+dynamic-fps, krypton, badoptimizations, reeses-sodium-options, notenoughanimations,
+jade, mousetweaks, betterf3, nochatreports, xaeros-minimap, xaeros-world-map, jei.
+
+### Deferred backlog
+- PulseVisuals-style modules to add in batches: Cooldowns HUD, Saturation HUD,
+  Totem Tracker, Item Pickup Logger, Streamer Mode, Hit Bubbles, Hitsound,
+  Hitbox Customizer, Block Overlay, Custom Hand, Target ESP, China Hat/Nimbus,
+  No Fluid, No Render (rain/shake/fire), Time Changer, World Customizer,
+  Aspect Ratio, Freelook, Sound Controller, Lock Slot, PvP Safe, Waypoints +
+  Death Marker, Fast XP, Fake Player, Config Sharing. Automation/server helpers
+  (AutoEat/AutoLeave/Item Swap/Predictions/AutoRebuy) stay out by fair-play rule.
+- OneConfig open-lag cleanup: candidate mods to disable are evergreenhud,
+  ukus-armor-hud, damagetint, polycrosshair, vanillahud (duplicate our HUD),
+  macos-input-fixes (useless on Windows), blur-fabric + polyblur (duplicates),
+  zoomify (our zoom exists). Player approves each batch before disabling.
+- FPS limit: vanilla already has Options → Video → Max Framerate +
+  Inactivity FPS Limit — no work needed.
+
+### 2026-11-24 (later) — OneConfig rebrand + HUD off + maps trimmed
+- The installed OneConfig jar is rebranded in place (both clusters): fabric.mod.json
+  name/icon → "Remix Companion" + our R icon, sidebar wordmark SVGs
+  (`assets/oneconfig/brand/*`) replaced with a blocky "REMIX COMPANION" mark
+  (violet→cyan gradient), `en_default.lang` says Remix Companion everywhere and the
+  polyfrost.org link points to t.me/remixclient_ru, `by-polyfrost.svg`/`atmofrost.svg`
+  show our mark. The OneConfig preferences page header still says "OneConfig" (class
+  constant — not patchable without bytecode surgery). Launcher content sync may
+  re-download the jar and revert the branding; re-run the patch script if it does.
+- Old-style HUD panels are OFF by default (code defaults + both config stores): the
+  player wants the PulseVisuals-style modules instead. Particles (trails, jump
+  circles, hit effects) stay on.
+- Xaero's World Map removed (kept Minimap only). Reese's Sodium Options removed
+  (needs Sodium 0.9.4-beta; 0.9.2 stays). mezz_config 0.7.1 added for JEI.
+
+### 2026-11-24 (night) — TikTok ad + OneConfig dup crash found
+- TikTok promo video built with HyperFrames in `tikkok-ad/` (project committed to repo dir;
+  render at `tikkok-ad/renders/*.mp4`, 1080x1920, 31s, silent — HeyGen not signed in, no BGM yet).
+  Script: MC ЛАГАЕТ? -> 3 steps pain -> logo reveal -> 4 proof cards (12 mods, RU settings,
+  keybinds G/B/RAlt, free forever) -> CTA end card (github + @remixclient.official).
+  User's TikTok account exists: remixclient.official (RemixClient Official), avatar = avatar.png.
+- `avatar.png` in repo root = real launcher icon (user's request), old logo.png/banner deleted.
+- CRASH FIX 3 (static sweep): dev cluster had TWO OneConfig jars (1.6.2 patched + 1.9.4
+  auto-downloaded) -> duplicate mod id `oneconfig` = crash. Removed 1.9.4. If launcher content
+  sync re-downloads it, delete again or pin version.
+
+### 2026-11-24 (late night) — changelog screen deleted, bundle content purged
+- **"Список изменений" screen REMOVED entirely** (user: чужой контент rozwader/junapur):
+  route SettingsChangelog, settings_shell tab, view file, hooks/queries/changelog.rs,
+  core changelog.rs, set_seen_changelog_version, seen_changelog_version field (serde-safe,
+  old settings files ignore unknown keys), 7 i18n keys x2 langs. cargo check + i18n tests OK.
+- **Bundle content purge (fix for "Incompatible mods found" + slow load):** Polyfrost bundle
+  mrpacks (hud/performance/qol/utility/skyblock from data-v2.polyfrost.org) had installed
+  ~137 mods requiring OneConfig >=1.8, but fork ships rebranded 1.6.2 -> Fabric "Incompatible
+  mods found!" modal. Sweep script (Temp/oc/sweep.cjs): removed 118/121 bundle jars from both
+  26.3 Fabric clusters, kept whitelist: fabric-api, sodium, lithium, c2me, ferritecore,
+  modernfix, entityculling, ImmediatelyFast, ScalableLux, servercore, debugify, BadOptimizations,
+  krypton, dynamic-fps, modmenu, appleskin, our 12 (Jade/jei+mezz_config/xaero/BetterF3/
+  MouseTweaks/NoChatReports/notenoughanimations), OneConfig 1.6.2 + remix-companion +
+  compose-bundle (OneConfig hard dep!) + fabric-language-kotlin. 30 jars total.
+- DB (user_data.db both profiles): cluster_bundle_choices accepted=0 for all 5 26.3 bundle
+  names (cluster 7) -> install_cluster_bundles at launch installs nothing; deleted 137/138
+  cluster_artifacts rows of removed jars. Re-added dynamic-fps/c2me/ferritecore from Modrinth
+  (whitelist id mismatch: dynamic_fps, c2me, ferritecore).
+- NOTE: nested jars inside OneConfig outer jar are its own libs (adventure/ui/config) — NOT
+  content mods, keep. The bundle content lives as STANDALONE jars in mods/.
+- Raw video cut: RemixServer/RemixClient-cut.mp4 (67s, from user's 172s recording; foreign
+  changelog segment 108-128 and the crash 152+ cut out). In-game footage still missing —
+  user should re-record now that the crash is fixed.
+
+### 2026-11-25 (reverted same day)
+- Cooldowns HUD (RemixCooldowns) was built and deployed, then REVERTED on user request
+  ("не надо, откати все, погоди, завтра решим"): module file, config field showCooldowns,
+  MODULES entry, lang keys removed, rebuilt + redeployed. Module batches are ON HOLD until
+  the player decides tomorrow. Keep: changelog screen removal + bundle purge (separate task).
+
+### 2026-11-25 (evening) — Appearance page + cosmetics placeholder
+- The "Скины" navbar tab is now «Внешность» / "Appearance" (keys: navbar.skins, routes.skins,
+  skins.title; route path unchanged /app/skins). Inside: two sections — "Скины" (existing
+  library) and "Косметика" with two placeholder cards: PaintPour "Coming soon" card (capes,
+  hats, wings in a future update) and a "Support the author 😅" card opening
+  https://t.me/remixclient_ru via platform::open_url. i18n keys added symmetric, tests pass,
+  cargo check OK. Reason: user asked where cosmetics went (fork never had Polyfrost cosmetics
+  backend; placeholders make the roadmap visible). Future cosmetics = donation-allowed area.
