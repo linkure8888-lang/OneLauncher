@@ -407,7 +407,15 @@ pub async fn detect_hardware() -> Hardware {
         && let Ok(cached) = serde_json::from_slice::<CachedHardware>(&bytes)
         && now_secs().saturating_sub(cached.detected_at) < CACHE_TTL_SECS
     {
-        return cached.hardware;
+        // A cache written by an older build can hold a virtual adapter's name;
+        // treat that as no cache and re-detect with the current filter.
+        if !is_virtual_adapter(&cached.hardware.gpu) {
+            return cached.hardware;
+        }
+        tracing::info!(
+            gpu = %cached.hardware.gpu,
+            "stale hardware cache holds a virtual adapter; re-detecting"
+        );
     }
 
     let mut hardware = Hardware::default();
@@ -459,6 +467,28 @@ fn total_ram_mb() -> u64 {
 /// up first in `Win32_VideoController` and report nonsense (16 Hz, no real
 /// VRAM). Skip anything virtual and prefer the controller driving the biggest
 /// active screen — that is the card the game will actually render on.
+/// Emulators and remote-desktop tools register fake display adapters that can
+/// also sneak back in through the hardware cache, so every adapter name read
+/// from disk or from CIM goes through this filter.
+fn is_virtual_adapter(name: &str) -> bool {
+    const MARKERS: [&str; 12] = [
+        "virtual",
+        "mumu",
+        "bluestacks",
+        "ldplayer",
+        "nox",
+        "memu",
+        "smartgaga",
+        "genymotion",
+        "hyper-v",
+        "indirect",
+        "basic render",
+        "remote",
+    ];
+    let lower = name.to_lowercase();
+    MARKERS.iter().any(|marker| lower.contains(marker))
+}
+
 fn query_adapter() -> (Option<String>, Option<u32>) {
     #[cfg(windows)]
     {
@@ -484,7 +514,10 @@ fn query_adapter() -> (Option<String>, Option<u32>) {
             .get("Name")
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            // Defense in depth: the CIM query already filters, but a stale
+            // response must never turn into a virtual adapter again.
+            .filter(|name| !is_virtual_adapter(name));
         let hz = value
             .get("CurrentRefreshRate")
             .and_then(|v| v.as_u64())
