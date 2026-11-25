@@ -18,10 +18,14 @@
       "org.remixclient.companion.RemixCompanionClient"
     ]
   },
+  "mixins": [
+    "remix_companion.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.20.1",
     "minecraft": "~26.3",
     "java": ">=25",
-    "fabric-api": "*"
+    "fabric-api": "*",
+    "oneconfig": "*"
   }
 }

@@ -32,6 +32,22 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	// OneConfig ships inside the launcher's content packs and hosts the companion's
+	// settings page; compile against the extracted API jars only, never shading them.
+	compileOnly files(
+			'libs/config-1.6.2.jar',
+			'libs/config-impl-1.6.2.jar',
+			'libs/ui-1.6.2.jar',
+	)
+}
+
+loom {
+	mixin {
+		// No mixin annotation processor: the game ships unobfuscated, so there is nothing
+		// to map and the legacy AP only fails on missing obfuscation data.
+		useLegacyMixinAp = false
+	}
 }
 
 processResources {
