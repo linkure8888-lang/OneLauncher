@@ -58,6 +58,29 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
   `git credential fill`), tags removed too. Only the latest release remains.
 - Push works with the locally stored GitHub credentials (`git credential fill`), no `gh` CLI installed.
 
+## Session notes: v2.12.1 (2026-11-25)
+
+- **GPU detection fixed**: `query_adapter()` in `oneclient_core/src/presets.rs` now filters out
+  virtual/emulator display adapters (MuMu, BlueStacks, LDPlayer, Nox, Hyper-V, Indirect, Basic,
+  Remote) and sorts by `CurrentHorizontalResolution` desc — picks the card driving the biggest
+  real screen. MuMu virtual adapter (16 Hz) was winning "First 1" before; now RTX 2060 @ 180 Hz.
+  `hardware.json` cache in both profile data dirs was deleted so detection re-runs.
+- **Bundle catalog retired for good** (user: card in mods picker, ugly Polyfrost design):
+  `BundlesManager::sync()` is now a no-op that purges the whole catalog via
+  `bundle_dao::purge_catalog` (plain non-macro sqlx queries: bundles,
+  cluster_bundle_choices, cluster_bundle_overrides, cluster_bundle_type_opt_outs). Existing
+  user clusters untouched. No more traffic to data-v2.polyfrost.org for bundles.
+- **Cosmetics placeholder** mentions Remix Coin (future currency for cosmetics, fair play).
+- **Crash reports**: `SENTRY_DSN` is compile-time `option_env!("REMIXCLIENT_SENTRY_DSN")`,
+  empty by default → Sentry never initializes, the settings toggle does nothing, nothing
+  leaves the PC. To actually receive reports user needs a sentry.io account + rebuild with DSN.
+- **Auto-update**: wired and enabled in release builds (events.rs:402 → spawn_update_check).
+  Debug builds: check runs but only notify-only toast. If user sees no prompt it means their
+  version == latest.json version.
+- **TG avatar**: use `C:/Users/user/Desktop/OneClient/avatar.png` (the launcher 512x512 icon
+  with the white R) — NOT the tile-only OneConfig brand mark.
+- After v2.12.1 release completes, delete the v2.12.0 release via API (keep only the actual one).
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
