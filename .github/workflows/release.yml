@@ -163,6 +163,8 @@ jobs:
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
+          # cargo-packager-updater refuses to deserialize an entry without it
+          FORMAT: ${{ matrix.formats }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
@@ -175,6 +177,8 @@ jobs:
           if not sigs:
               raise SystemExit(0)
           sig = sigs[0]
+          # cargo-packager-updater wants "app" for macOS bundles even when the file is a dmg
+          fmt = "app" if os.environ["PLATFORM"].startswith("darwin") else os.environ["FORMAT"]
           artifact = sig[:-4]
           url = (f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
                  f"/releases/download/{os.environ['TAG']}/{os.path.basename(artifact)}")
@@ -183,6 +187,7 @@ jobs:
               "platforms": {os.environ["PLATFORM"]: {
                   "signature": open(sig).read().strip(),
                   "url": url,
+                  "format": fmt,
               }},
           }
           out = f"dist/updater-entry-{os.environ['PLATFORM']}.json"
