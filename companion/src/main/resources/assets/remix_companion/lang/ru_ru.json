@@ -40,6 +40,5 @@
   "remix_companion.keybinds.offhand": "OFFHAND",
   "key.remix_companion.zoom": "Зум (удерживать G)",
   "remix_companion.module.trails": "След",
-  "key.remix_companion.editor": "Редактор HUD",
-  "remix_companion.module.pickups": "Подборы"
+  "key.remix_companion.editor": "Редактор HUD"
 }

@@ -201,7 +201,7 @@ fn cosmetics_section() -> Element {
             rect()
                 .horizontal()
                 .width(Size::fill())
-                .content(Content::wrap_spacing(16.))
+                .content(Content::wrap_spacing(24.))
                 .child(
                     rect()
                         .vertical()
@@ -227,6 +227,29 @@ fn cosmetics_section() -> Element {
                                         .font_size(text_size(14.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .color(colors::fg_primary()),
+                                )
+                                // The currency badge lives in the title row: it never
+                                // wraps into a cramped second line of chips.
+                                .child(
+                                    rect()
+                                        .horizontal()
+                                        .spacing(6.)
+                                        .padding(Gaps::new_symmetric(6., 10.))
+                                        .cross_align(Alignment::Center)
+                                        .corner_radius(rounded(8.))
+                                        .background(colors::component_bg())
+                                        .child(
+                                            Icon::new(IconType::Coin)
+                                                .size(14.)
+                                                .color(colors::brand()),
+                                        )
+                                        .child(
+                                            label()
+                                                .text(t("oneclient.cosmetics.coin"))
+                                                .font_size(text_size(11.))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .color(colors::brand()),
+                                        ),
                                 ),
                         )
                         .child(
@@ -238,7 +261,7 @@ fn cosmetics_section() -> Element {
                         .child(
                             rect()
                                 .horizontal()
-                                .spacing(8.)
+                                .spacing(10.)
                                 .child(item_chip(
                                     IconType::Cape,
                                     t("oneclient.cosmetics.item.cape"),
@@ -247,28 +270,7 @@ fn cosmetics_section() -> Element {
                                     IconType::Wings,
                                     t("oneclient.cosmetics.item.wings"),
                                 ))
-                                .child(item_chip(IconType::Hat, t("oneclient.cosmetics.item.hat")))
-                                .child(
-                                    rect()
-                                        .horizontal()
-                                        .spacing(6.)
-                                        .padding(Gaps::new_all(8.))
-                                        .cross_align(Alignment::Center)
-                                        .corner_radius(rounded(8.))
-                                        .background(colors::component_bg())
-                                        .child(
-                                            Icon::new(IconType::Coin)
-                                                .size(16.)
-                                                .color(colors::brand()),
-                                        )
-                                        .child(
-                                            label()
-                                                .text(t("oneclient.cosmetics.coin"))
-                                                .font_size(text_size(12.))
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .color(colors::brand()),
-                                        ),
-                                ),
+                                .child(item_chip(IconType::Hat, t("oneclient.cosmetics.item.hat"))),
                         ),
                 )
                 .child(

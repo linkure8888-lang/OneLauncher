@@ -181,7 +181,6 @@ public class RemixCompanionClient implements ClientModInitializer {
         try {
             ClientPreAttackCallback.EVENT.register((client, player, slot) -> {
                 RemixHitEffects.onAttack(client, player, config);
-                RemixHitsound.onAttack(client, player, config);
                 // Never cancel: the swing itself must always go through.
                 return false;
             });

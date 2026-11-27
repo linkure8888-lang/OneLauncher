@@ -22,7 +22,6 @@ public final class RemixHud {
             RemixKeybinds.INSTANCE,
             RemixTargetHud.INSTANCE,
             RemixPotions.INSTANCE,
-            RemixPickups.INSTANCE,
             RemixWatermark.INSTANCE,
             RemixCrosshair.INSTANCE);
 
@@ -34,7 +33,6 @@ public final class RemixHud {
     /** Called once per client tick. */
     public static void tick(Minecraft client) {
         RemixStatus.INSTANCE.tick(client);
-        RemixPickups.INSTANCE.tick(client);
     }
 
     static List<RemixModule> modules() {

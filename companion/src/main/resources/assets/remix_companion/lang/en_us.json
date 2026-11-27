@@ -40,6 +40,5 @@
   "remix_companion.keybinds.offhand": "OFFHAND",
   "key.remix_companion.zoom": "Hold to zoom (G)",
   "remix_companion.module.trails": "Trail",
-  "key.remix_companion.editor": "HUD editor",
-  "remix_companion.module.pickups": "Pickups"
+  "key.remix_companion.editor": "HUD editor"
 }

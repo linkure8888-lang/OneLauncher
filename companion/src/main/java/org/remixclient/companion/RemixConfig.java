@@ -45,53 +45,29 @@ public class RemixConfig extends Config {
     public static final int MAX_THICKNESS = 3;
 
     public static final int MIN_HIT_PARTICLES = 4;
-    public static final int MIN_HITSOUND_VOLUME = 10;
-    public static final int MAX_HITSOUND_VOLUME = 100;
     public static final int MAX_HIT_PARTICLES = 16;
 
     private static final String FILE_NAME = "remix-companion.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    // The movable HUD modules (status, keystrokes, target HUD, ...) have no switches here:
+    // they are toggled and moved in the HUD editor (Right Alt), so the OneConfig list only
+    // shows the effects the player cannot reach there. The plain fields below keep their
+    // values through the JSON file and the editor.
+
     /** Armour, weapon and totem rows, drawn as one movable block. */
-    @Switch(title = "Armor & Totems", description = "Armour, held weapon and totem counts in one panel.",
-            category = "HUD", subcategory = "Modules")
     public boolean showStatus = false;
-    @Switch(title = "Armor row", description = "Worn armour pieces with durability.",
-            category = "HUD", subcategory = "Modules")
     public boolean showArmor = false;
-    @Switch(title = "Weapon display", description = "Show the held item with its stack count.",
-            category = "HUD", subcategory = "Modules")
     public boolean showWeapon = false;
-    @Switch(title = "Totem counter", description = "Count totems and flash when one pops.",
-            category = "HUD", subcategory = "Modules")
     public boolean showTotems = false;
-
-    /** Visual modules, all drawn as separate movable panels. */
-    @Switch(title = "Keystrokes", description = "WASD, jump and mouse buttons with CPS counters.",
-            category = "HUD", subcategory = "Modules")
     public boolean showKeystrokes = false;
-    @Switch(title = "Action keys", description = "Shift, sprint and offhand indicator rows.",
-            category = "HUD", subcategory = "Modules")
     public boolean showKeybinds = false;
-    @Switch(title = "Target HUD", description = "Health and armour of whoever is under the crosshair.",
-            category = "HUD", subcategory = "Modules")
     public boolean showTargetHud = false;
-    @Switch(title = "Potion effects", description = "Active status effects with their remaining time.",
-            category = "HUD", subcategory = "Modules")
     public boolean showPotions = false;
-    @Switch(title = "Watermark", description = "Client name with FPS and ping.",
-            category = "HUD", subcategory = "Modules")
     public boolean showWatermark = false;
-    @Switch(title = "Coordinates", description = "Current XYZ position under the watermark.",
-            category = "HUD", subcategory = "Modules")
     public boolean showCoords = false;
-    @Switch(title = "Pickup logger", description = "A fading feed of the items you just picked up.",
-            category = "HUD", subcategory = "Modules")
-    public boolean showPickups = true;
 
-    @Slider(title = "Panel opacity", description = "Transparency of every HUD panel background.",
-            category = "HUD", subcategory = "Panels",
-            min = MIN_OPACITY, max = MAX_OPACITY, step = 1)
+    /** Panel background opacity, kept as a plain field without a OneConfig switch. */
     public int opacity = 100;
 
     /** Combat effects drawn as client-side particles, so servers see nothing extra. */
@@ -112,13 +88,6 @@ public class RemixConfig extends Config {
     /** Colour of the hit particles; packed 0xRRGGBB, the alpha channel is decided at draw time. */
     public int hitParticleColor = 0xFFB44C;
 
-    @Switch(title = "Hit sound", description = "A short chime whenever a swing connects.",
-            category = "Visuals", subcategory = "Effects")
-    public boolean hitsound = true;
-    @Slider(title = "Hit sound volume", description = "Loudness of the hit chime.",
-            category = "Visuals", subcategory = "Effects",
-            min = MIN_HITSOUND_VOLUME, max = MAX_HITSOUND_VOLUME, step = 1)
-    public int hitsoundVolume = 70;
 
     /** Replaces the vanilla crosshair; needs the HUD mixin, so it is opt-in. */
     @Switch(title = "Custom crosshair", description = "Draw the companion crosshair instead of the vanilla one.",
@@ -224,14 +193,11 @@ public class RemixConfig extends Config {
         showPotions = other.showPotions;
         showWatermark = other.showWatermark;
         showCoords = other.showCoords;
-        showPickups = other.showPickups;
         hitEffects = other.hitEffects;
         jumpCircles = other.jumpCircles;
         trails = other.trails;
         hitParticleColor = other.hitParticleColor;
         hitParticleCount = other.hitParticleCount;
-        hitsound = other.hitsound;
-        hitsoundVolume = other.hitsoundVolume;
         showCrosshair = other.showCrosshair;
         crosshairDot = other.crosshairDot;
         crosshairOutline = other.crosshairOutline;
@@ -307,14 +273,11 @@ public class RemixConfig extends Config {
         showPotions = false;
         showWatermark = false;
         showCoords = false;
-        showPickups = true;
         hitEffects = true;
         jumpCircles = true;
         trails = true;
         hitParticleColor = 0xFFB44C;
         hitParticleCount = 8;
-        hitsound = true;
-        hitsoundVolume = 70;
         showCrosshair = false;
         crosshairDot = true;
         crosshairOutline = true;
