@@ -22,7 +22,6 @@ public final class RemixHud {
             RemixKeybinds.INSTANCE,
             RemixTargetHud.INSTANCE,
             RemixPotions.INSTANCE,
-            RemixSaturation.INSTANCE,
             RemixPickups.INSTANCE,
             RemixWatermark.INSTANCE,
             RemixCrosshair.INSTANCE);

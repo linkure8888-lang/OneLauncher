@@ -41,9 +41,5 @@
   "key.remix_companion.zoom": "Зум (удерживать G)",
   "remix_companion.module.trails": "След",
   "key.remix_companion.editor": "Редактор HUD",
-  "remix_companion.module.saturation": "Сытость",
-  "remix_companion.module.pickups": "Подборы",
-  "remix_companion.hud.food": "Еда",
-  "remix_companion.hud.sat": "Насыщ.",
-  "remix_companion.hud.air": "Воздух"
+  "remix_companion.module.pickups": "Подборы"
 }

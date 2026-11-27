@@ -85,9 +85,6 @@ public class RemixConfig extends Config {
     @Switch(title = "Coordinates", description = "Current XYZ position under the watermark.",
             category = "HUD", subcategory = "Modules")
     public boolean showCoords = false;
-    @Switch(title = "Saturation HUD", description = "Hunger, saturation and air supply in one flat panel.",
-            category = "HUD", subcategory = "Modules")
-    public boolean showSaturation = true;
     @Switch(title = "Pickup logger", description = "A fading feed of the items you just picked up.",
             category = "HUD", subcategory = "Modules")
     public boolean showPickups = true;
@@ -227,7 +224,6 @@ public class RemixConfig extends Config {
         showPotions = other.showPotions;
         showWatermark = other.showWatermark;
         showCoords = other.showCoords;
-        showSaturation = other.showSaturation;
         showPickups = other.showPickups;
         hitEffects = other.hitEffects;
         jumpCircles = other.jumpCircles;
@@ -311,7 +307,6 @@ public class RemixConfig extends Config {
         showPotions = false;
         showWatermark = false;
         showCoords = false;
-        showSaturation = true;
         showPickups = true;
         hitEffects = true;
         jumpCircles = true;

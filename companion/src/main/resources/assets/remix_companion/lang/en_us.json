@@ -41,9 +41,5 @@
   "key.remix_companion.zoom": "Hold to zoom (G)",
   "remix_companion.module.trails": "Trail",
   "key.remix_companion.editor": "HUD editor",
-  "remix_companion.module.saturation": "Saturation",
-  "remix_companion.module.pickups": "Pickups",
-  "remix_companion.hud.food": "Food",
-  "remix_companion.hud.sat": "Sat",
-  "remix_companion.hud.air": "Air"
+  "remix_companion.module.pickups": "Pickups"
 }

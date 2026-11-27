@@ -37,7 +37,6 @@ final class RemixDescriptions {
         RU.put("showPotions", "Активные эффекты и время их действия.");
         RU.put("showWatermark", "Название клиента, FPS и пинг.");
         RU.put("showCoords", "Текущие координаты XYZ.");
-        RU.put("showSaturation", "Еда, насыщение и запас воздуха в одной панели.");
         RU.put("showPickups", "Затухающая лента подобранных предметов.");
         RU.put("hitsound", "Короткий звон при попадании.");
         RU.put("hitsoundVolume", "Громкость звука попадания.");
