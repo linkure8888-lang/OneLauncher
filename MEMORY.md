@@ -81,6 +81,22 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
   with the white R) — NOT the tile-only OneConfig brand mark.
 - After v2.12.1 release completes, delete the v2.12.0 release via API (keep only the actual one).
 
+## Session notes: v2.12.5 + companion batch (2026-11-26)
+
+- **Auto-update root cause fixed**: latest.json lacked the required `format` field per platform
+  (cargo-packager-updater refuses it) → released v2.12.5 with the fix; macOS entries say `app`
+  even for dmg. Player confirmed auto-update works. Only the latest release is kept on GitHub.
+- Careful: tag v2.12.4 shipped without the Cargo.toml bump (interrupted turn) → immediately
+  superseded by v2.12.5. Always verify `git show <tag>:Cargo.toml` has the right version.
+- **Companion batch built** (Pulse-style, own code): hit sound (crit pitch higher, volume slider),
+  saturation HUD (10 squares, exact saturation, air when < 100%), pickup logger (inventory
+  diffed per tick, entries fade after ~3s). Defaults ON, deployed to both clusters.
+- Totem tracker + CPS already existed (status module / keystrokes).
+- Batch 2 candidates from the Pulse backlog: Freelook, No Render (rain/shake/fire),
+  Time Changer (26.3 changed time to WorldClock/ClockManager — needs research before mixin),
+  Streamer Mode, Hitbox Customizer, Block Overlay. ESP-like (Target ESP, China Hat) stay out
+  by the fair-play rule.
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
