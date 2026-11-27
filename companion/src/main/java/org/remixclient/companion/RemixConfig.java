@@ -45,6 +45,8 @@ public class RemixConfig extends Config {
     public static final int MAX_THICKNESS = 3;
 
     public static final int MIN_HIT_PARTICLES = 4;
+    public static final int MIN_HITSOUND_VOLUME = 10;
+    public static final int MAX_HITSOUND_VOLUME = 100;
     public static final int MAX_HIT_PARTICLES = 16;
 
     private static final String FILE_NAME = "remix-companion.json";
@@ -83,6 +85,12 @@ public class RemixConfig extends Config {
     @Switch(title = "Coordinates", description = "Current XYZ position under the watermark.",
             category = "HUD", subcategory = "Modules")
     public boolean showCoords = false;
+    @Switch(title = "Saturation HUD", description = "Hunger, saturation and air supply in one flat panel.",
+            category = "HUD", subcategory = "Modules")
+    public boolean showSaturation = true;
+    @Switch(title = "Pickup logger", description = "A fading feed of the items you just picked up.",
+            category = "HUD", subcategory = "Modules")
+    public boolean showPickups = true;
 
     @Slider(title = "Panel opacity", description = "Transparency of every HUD panel background.",
             category = "HUD", subcategory = "Panels",
@@ -106,6 +114,14 @@ public class RemixConfig extends Config {
     public int hitParticleCount = 8;
     /** Colour of the hit particles; packed 0xRRGGBB, the alpha channel is decided at draw time. */
     public int hitParticleColor = 0xFFB44C;
+
+    @Switch(title = "Hit sound", description = "A short chime whenever a swing connects.",
+            category = "Visuals", subcategory = "Effects")
+    public boolean hitsound = true;
+    @Slider(title = "Hit sound volume", description = "Loudness of the hit chime.",
+            category = "Visuals", subcategory = "Effects",
+            min = MIN_HITSOUND_VOLUME, max = MAX_HITSOUND_VOLUME, step = 1)
+    public int hitsoundVolume = 70;
 
     /** Replaces the vanilla crosshair; needs the HUD mixin, so it is opt-in. */
     @Switch(title = "Custom crosshair", description = "Draw the companion crosshair instead of the vanilla one.",
@@ -211,11 +227,15 @@ public class RemixConfig extends Config {
         showPotions = other.showPotions;
         showWatermark = other.showWatermark;
         showCoords = other.showCoords;
+        showSaturation = other.showSaturation;
+        showPickups = other.showPickups;
         hitEffects = other.hitEffects;
         jumpCircles = other.jumpCircles;
         trails = other.trails;
         hitParticleColor = other.hitParticleColor;
         hitParticleCount = other.hitParticleCount;
+        hitsound = other.hitsound;
+        hitsoundVolume = other.hitsoundVolume;
         showCrosshair = other.showCrosshair;
         crosshairDot = other.crosshairDot;
         crosshairOutline = other.crosshairOutline;
@@ -291,11 +311,15 @@ public class RemixConfig extends Config {
         showPotions = false;
         showWatermark = false;
         showCoords = false;
+        showSaturation = true;
+        showPickups = true;
         hitEffects = true;
         jumpCircles = true;
         trails = true;
         hitParticleColor = 0xFFB44C;
         hitParticleCount = 8;
+        hitsound = true;
+        hitsoundVolume = 70;
         showCrosshair = false;
         crosshairDot = true;
         crosshairOutline = true;
