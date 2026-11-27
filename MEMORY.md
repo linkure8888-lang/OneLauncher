@@ -97,6 +97,27 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
   Streamer Mode, Hitbox Customizer, Block Overlay. ESP-like (Target ESP, China Hat) stay out
   by the fair-play rule.
 
+### Session notes: OneConfig dup + poly-stack cleanup (2026-11-26, late)
+- **OneConfig 1.9.4 came back** next to 1.6.2 in the MAIN cluster (content sync re-downloaded it);
+  141 jars total after the user installed a poly* stack himself (freelook, polytime, polyweather,
+  chatting, autotext, betterstats, Gnetum, NBTac, ...). The lag the user complained about was the
+  duplicate OneConfig init.
+- Removed from both clusters + DB rows purged so they do not re-download: OneConfig-1.9.4,
+  evergreenhud, vanillahud, damagetint, polycrosshair, polyblur (all duplicate our own modules).
+  33 mods in the main cluster still declare a OneConfig dependency; that is the user's own install
+  and he decides whether to thin it out.
+- OneConfig **module switches removed from the settings UI** (player asked repeatedly): the
+  @Switch/@Slider annotations for showStatus/showArmor/showWeapon/showTotems/showKeystrokes/
+  showKeybinds/showTargetHud/showPotions/showWatermark/showCoords/opacity were stripped;
+  plain fields keep the values via the JSON file; HUD editor (Right Alt) toggles modules.
+  Visuals (hit particles, jump circles, trails, crosshair) keep their switches.
+- Hit sound + pickup logger removed at the player's request (he saw them in game and did not
+  like them). Saturation HUD was removed even earlier. Lesson: propose the batch as a list,
+  wait for his pick, only then build.
+- STILL OPEN: the skins page (and other full-width ScrollArea pages) clips content flush at the
+  right window edge (empty-state card glued to the border). Suspected torin fill+padding
+  measurement; needs a live repro to fix properly.
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
