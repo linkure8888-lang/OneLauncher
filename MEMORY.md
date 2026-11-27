@@ -118,6 +118,24 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
   right window edge (empty-state card glued to the border). Suspected torin fill+padding
   measurement; needs a live repro to fix properly.
 
+### OneConfig 1.9.4 rebrand (2026-11-26, session 2)
+- User's own poly-stack mods (autotext, chatting, polydium, polycompose, Custom Block Highlight,
+  CrashPatch, Screencapper...) require OneConfig >=1.8/1.9; our branded fork was 1.6.2, so the
+  game refused to start. Rebuilt the rebrand on **OneConfig 1.9.4** (source: dev-profile metadata
+  cache metadata/packages/mods/modrinth/AibBIVmj/Mr9retFM/OneConfig-26.3-fabric-1.9.4.jar).
+- Rebrand recipe (script at %TEMP%/oc9/brand.cjs): outer fabric.mod.json name/description/authors/
+  contact + oneconfig-icon.png swapped; nested internal-1.9.4.jar gets the branded assets from
+  %TEMP%/oc/patchstage/internal_x (brand/*.svg+png, ico/default_mod.svg, images/minecraft-*,
+  polyglass-*) plus 1.9.4-only files pointed at our art: brand/oneconfig-white.svg -> oneconfig.svg,
+  images/polyfrosted-dark|light.svg -> polyglass replacements; en_default.lang of 1.9.4 itself
+  gets 'OneConfig'->'Remix Companion' + polyfrost.org/mods->t.me/remixclient_ru in VALUES only.
+- Deployed as OneConfig-26.3-fabric-1.9.4.jar to both clusters (1.6.2 removed); DB
+  cluster_artifacts.cluster_file_name renamed. Companion API classes all exist in 1.9.4
+  (Config/Property/Tree/Slider/Switch/OneConfigUI verified by byte-scan of nested jars).
+- Crash dialog Telegram card: body label had max_lines(1) -> RU text ran under the button;
+  removed max_lines so it wraps (crash_dialog/mod.rs discord_card).
+- Launcher-side theme images in OneConfig (polyfrosted-*) now show Remix art.
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
