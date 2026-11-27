@@ -597,7 +597,6 @@ fn discord_card(mut confirm: State<Option<String>>) -> impl IntoElement {
                     label()
                         .text(t("oneclient.components.crash_dialog.discord.body"))
                         .font_size(text_size(12.))
-                        .max_lines(1)
                         .width(Size::fill())
                         .color(colors::fg_secondary()),
                 ),
