@@ -201,6 +201,9 @@ fn cosmetics_section() -> Element {
             rect()
                 .horizontal()
                 .width(Size::fill())
+                // torin's wrap_spacing only kicks in when a child wraps to the next
+                // line; siblings on one line are spaced by the regular spacing.
+                .spacing(24.)
                 .content(Content::wrap_spacing(24.))
                 .child(
                     rect()
