@@ -8,11 +8,9 @@ use crate::theme::{colors, rounded, text_size};
 use crate::ui::{border_all_color, columns_for};
 
 mod charts;
-mod servers;
 mod tiles;
 
 use charts::{DailyChart, PlaytimeChart, distribution_card};
-use servers::servers_section;
 use tiles::{personas_row, tiles_row};
 
 pub fn analytics_body(analytics: &Analytics) -> Element {
@@ -38,10 +36,6 @@ fn analytics_body_inner(analytics: &Analytics, force_all: bool) -> Element {
         charts.push(dist);
     }
     root = root.child(charts_grid(charts));
-
-    if force_all || !analytics.servers.is_empty() {
-        root = root.child(servers_section(&analytics.servers));
-    }
 
     root.into_element()
 }

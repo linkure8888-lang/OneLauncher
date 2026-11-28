@@ -77,7 +77,7 @@ pub use button::{
     Button, ButtonSize, ButtonVariant, copy_button, link_button, open_folder_button,
     sized_open_folder_button,
 };
-pub use charts::{BarChart, PieChart, ValueUnit, slice_color};
+pub use charts::{BarChart, ValueUnit};
 pub use checkbox::checkbox_labeled;
 pub use cluster_menu::{ClusterContextMenu, ClusterMenuTarget};
 pub use cluster_update_popup::ClusterUpdatePopup;

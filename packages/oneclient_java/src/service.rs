@@ -74,6 +74,7 @@ impl JavaService {
         Ok(self.list_runtimes().await?.iter().any(|runtime| {
             &runtime.vendor == vendor
                 && major.is_none_or(|major| runtime.major == major)
+                && meets_security_floor(runtime)
                 && Path::new(&runtime.absolute_path).is_file()
         }))
     }
@@ -253,6 +254,18 @@ impl JavaService {
             .await?
             .into_iter()
             .filter(|runtime| runtime.major == major)
+            .filter(|runtime| {
+                if meets_security_floor(runtime) {
+                    true
+                } else {
+                    tracing::warn!(
+                        version = %runtime.version,
+                        major,
+                        "rejecting a runtime below the OpenJDK security floor"
+                    );
+                    false
+                }
+            })
             .collect();
 
         candidates.sort_by_key(|a| std::cmp::Reverse(pick_order(a, &preferred)));
@@ -449,6 +462,29 @@ impl JavaService {
     }
 }
 
+/// OpenJDK CPU releases a vendor-managed runtime must reach before a game
+/// session is allowed to use it. Java4Shell (CVE-2026-114938) is a HotSpot
+/// Base64 decoder overflow reachable from a hostile server; these are the
+/// builds it was fixed upstream in. Anything older is re-downloaded.
+fn security_floor(major: u32) -> Option<(u32, u32, u32)> {
+    match major {
+        25 => Some((25, 0, 6)),
+        21 => Some((21, 0, 14)),
+        17 => Some((17, 0, 22)),
+        _ => None,
+    }
+}
+
+/// An unparsable version is treated as below the floor: an unknown build
+/// must not be trusted to run a game against hostile servers.
+fn meets_security_floor(runtime: &JavaRuntime) -> bool {
+    let Some((a, b, c)) = security_floor(runtime.major) else {
+        return true;
+    };
+    let key = version_key(&runtime.version);
+    key.len() >= 3 && (key[0], key[1], key[2]) >= (a, b, c)
+}
+
 /// Ranked highest-first the default vendor beats every other, a kit beats a
 /// runtime of the same vendor, and only then does the newest build win
 fn pick_order(runtime: &JavaRuntime, preferred: &JavaVendor) -> (bool, bool, Vec<u32>) {
@@ -536,6 +572,47 @@ mod tests {
     fn patch_numbers_are_compared_as_numbers_not_as_text() {
         assert!(version_key("21.0.12") > version_key("21.0.9"));
         assert_eq!(version_key("1.8.0_412"), vec![1, 8, 0, 412]);
+    }
+
+    #[test]
+    fn runtimes_below_the_java4shell_floor_are_rejected() {
+        // 25.0.5.0.2 is what the launcher currently ships; the overflow was
+        // patched upstream in 25.0.6
+        let vulnerable = runtime(JavaVendor::Microsoft, "25.0.5.0.2", true);
+        let patched = runtime(JavaVendor::Microsoft, "25.0.6.0.1", true);
+        assert!(!meets_security_floor(&vulnerable));
+        assert!(meets_security_floor(&patched));
+        // 21.0.13 and 17.0.21 are the affected builds there
+        assert!(!meets_security_floor(&runtime(
+            JavaVendor::Adoptium,
+            "21.0.13.1",
+            true
+        )));
+        assert!(meets_security_floor(&runtime(
+            JavaVendor::Adoptium,
+            "21.0.14",
+            true
+        )));
+        assert!(!meets_security_floor(&runtime(
+            JavaVendor::Adoptium,
+            "17.0.21.0.3",
+            true
+        )));
+        assert!(meets_security_floor(&runtime(
+            JavaVendor::Adoptium,
+            "17.0.22",
+            true
+        )));
+        // unparseable versions are not trusted either
+        let mut banana = runtime(JavaVendor::Adoptium, "21.0.14", true);
+        banana.version = "banana".to_string();
+        assert!(!meets_security_floor(&banana));
+        // majors without an advisory keep working as before
+        assert!(meets_security_floor(&runtime(
+            JavaVendor::Adoptium,
+            "8.0.1",
+            true
+        )));
     }
 
     #[test]

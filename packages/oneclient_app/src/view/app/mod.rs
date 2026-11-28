@@ -1,17 +1,11 @@
 mod analytics;
-mod clusters;
-mod home;
-mod skins;
-mod stats;
-// The server catalog is temporarily hidden from the UI (a revenue feature is
-// still being prepared). The code is kept on disk and compiles again as soon
-// as this module is restored here and the route/nav links are re-added.
-#[cfg(any())]
-mod servers;
-
 pub mod browser;
 pub mod cluster;
+mod clusters;
+mod home;
 pub mod settings;
+mod skins;
+mod stats;
 
 use crate::hooks::{settled_or_loading, use_clusters, use_game_snapshot};
 use crate::i18n::t;

@@ -8,8 +8,6 @@ use oneclient_auth::MinecraftAccount;
 use oneclient_core::LauncherError;
 use uuid::Uuid;
 
-const SIGN_OUT_LEAVE_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
-
 static HANDLED_LOGIN_CODE: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn login_code_already_handled(user_code: &str) -> bool {
