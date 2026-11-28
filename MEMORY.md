@@ -152,6 +152,30 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
 - Static hard check: ALL PASSED (configs, single branded 1.9.4 in both clusters, companion
   deployed, rollback kit). Real game boot pending user's manual test.
 
+### Session 3: Hitman smoothness + Java4Shell + servers list removal
+- "Hitman" tuning restored the cinematic look but kept it cheap: blur ON, open/close/page
+  animations ON with short eases (0.2/0.4), glow 16, page/sidebar opacity 90/85; instantSearch,
+  sounds, marquee stay OFF. Applied to themes.json + oneconfig.json (local, effective immediately).
+- Game boot + worldgen (oneclient_mc/arguments.rs performance_flags): Xms=Xmx (no heap growth),
+  Aikar-style G1 pacing on Java>=21 (MaxGCPauseMillis=100, G1NewSizePercent=20/40, Reserve 20,
+  MixedGCLiveThreshold 90, region 16M when heap>=8G), and AppCDS on Java>=24
+  (-XX:+IgnoreUnrecognizedVMOptions -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=remix-cds.jsa,
+  relative name so spaces in the cluster path are safe). 63/63 tests pass. Lands with v2.12.6.
+- Java4Shell (CVE-2026-114938, HotSpot Base64 decoder overflow): oneclient_java/src/service.rs now
+  has security_floor (25->25.0.6, 21->21.0.14, 17->17.0.22); runtimes below the floor are rejected
+  in has_vendor_runtime + best_recorded_for_major so the launcher re-downloads the patched build.
+  Unparseable versions are rejected too. Custom user-pinned java paths are not blocked.
+  Locally purged: deleted the cached microsoft-jdk-25.0.5.0.2 dirs + java_versions rows from both
+  profiles' DBs and reset setting_profiles.java_path for '26.3 Fabric' to auto, so even the
+  installed 2.12.5 re-resolves the latest patched JDK on next launch.
+- Servers list removed per user request: analytics servers_section + analytics/servers.rs,
+  dead view/app/servers.rs page, hooks/queries/servers.rs (+exports), PieChart machinery
+  (SLICE_COLORS/slice_color/PIE_*/slice_at), unused chart imports, SIGN_OUT_LEAVE_LIMIT;
+  33 i18n keys (analytics.servers.* + servers.*) removed from en_us/ru_RU. i18n test 3/3.
+  oneclient_core servers.rs (servers.json catalog + TCP ping) kept for the future revenue feature.
+- WATCH: the #[cfg(any())] in view/app/mod.rs used to hide the server catalog; fixed so the mods
+  browser is active again. Do not re-point cfg(any()) at browser.
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
