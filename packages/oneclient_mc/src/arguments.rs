@@ -74,7 +74,12 @@ pub fn java_arguments(
 
 const ZGC_MIN_HEAP_MB: u32 = 8192;
 
-const INITIAL_HEAP_MB: u32 = 512;
+/// G1 regions need a decent heap before 16M regions stop wasting memory.
+const G1_REGION_MIN_HEAP_MB: u32 = 8192;
+
+/// Relative name resolved against the game working directory, so a cluster
+/// path with spaces never ends up inside a single JVM argument.
+const CDS_ARCHIVE_NAME: &str = "remix-cds.jsa";
 
 #[must_use]
 pub fn performance_flags(
@@ -83,7 +88,9 @@ pub fn performance_flags(
     mem_max: u32,
     custom_args: &[String],
 ) -> Vec<String> {
-    let mut flags = vec![format!("-Xms{}M", mem_max.min(INITIAL_HEAP_MB))];
+    // Commit the whole heap up front: growing it during boot costs GC
+    // cycles, and the OS only maps pages that are actually touched.
+    let mut flags = vec![format!("-Xms{}M", mem_max)];
 
     let collector_chosen = custom_args.iter().any(|arg| is_collector_flag(arg));
 
@@ -103,10 +110,34 @@ pub fn performance_flags(
     } else if use_g1 {
         flags.push("-XX:+UseG1GC".to_string());
         flags.push("-XX:+ParallelRefProcEnabled".to_string());
+        if java_major >= 21 {
+            // Aikar-style pacing: a bigger young generation keeps chunk
+            // generation and spawn rush from turning into pause storms.
+            flags.push("-XX:MaxGCPauseMillis=100".to_string());
+            flags.push("-XX:G1NewSizePercent=20".to_string());
+            flags.push("-XX:G1MaxNewSizePercent=40".to_string());
+            flags.push("-XX:G1ReservePercent=20".to_string());
+            flags.push("-XX:G1HeapWastePercent=5".to_string());
+            flags.push("-XX:G1MixedGCCountTarget=4".to_string());
+            flags.push("-XX:G1InitiatingHeapOccupancyPercent=35".to_string());
+            flags.push("-XX:G1MixedGCLiveThresholdPercent=90".to_string());
+            if mem_max >= G1_REGION_MIN_HEAP_MB {
+                flags.push("-XX:G1HeapRegionSize=16M".to_string());
+            }
+        }
     }
 
     if (use_zgc || use_g1) && java_major >= 24 && is_64_bit(java_arch) {
         flags.push("-XX:+UseCompactObjectHeaders".to_string());
+    }
+
+    // Class data sharing: the first boot dumps the archive, later boots
+    // skip re-verifying every class of a fat modpack and start faster.
+    // An outdated archive is dropped automatically, never a hard failure.
+    if java_major >= 24 {
+        flags.push("-XX:+IgnoreUnrecognizedVMOptions".to_string());
+        flags.push("-XX:+AutoCreateSharedArchive".to_string());
+        flags.push(format!("-XX:SharedArchiveFile={CDS_ARCHIVE_NAME}"));
     }
 
     flags
@@ -675,8 +706,47 @@ mod tests {
     #[test]
     fn a_java_8_runtime_gets_g1() {
         let j8 = flags(8, "amd64", 4096);
-        assert_eq!(j8.first().unwrap(), "-Xms512M");
+        assert_eq!(j8.first().unwrap(), "-Xms4096M");
         assert!(j8.contains(&"-XX:+UseG1GC".to_string()));
+        assert!(
+            !j8.iter().any(|f| f.contains("G1NewSizePercent")),
+            "java 8 keeps the plain G1 setup"
+        );
+    }
+
+    #[test]
+    fn a_modern_g1_runtime_gets_aikar_pacing() {
+        let f = flags(21, "amd64", 4096);
+        for flag in [
+            "-XX:MaxGCPauseMillis=100",
+            "-XX:G1NewSizePercent=20",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1ReservePercent=20",
+            "-XX:G1InitiatingHeapOccupancyPercent=35",
+        ] {
+            assert!(f.contains(&flag.to_string()), "missing {flag}");
+        }
+        assert!(
+            !f.iter().any(|f| f.contains("G1HeapRegionSize")),
+            "a small heap must not reserve 16M regions"
+        );
+        // On a 64-bit runtime an 8G heap takes the ZGC path, so the region
+        // size check runs against the 32-bit branch that always picks G1.
+        assert!(flags(21, "x86", 8192).contains(&"-XX:G1HeapRegionSize=16M".to_string()));
+    }
+
+    #[test]
+    fn a_java_25_runtime_gets_a_shared_class_archive() {
+        let f = flags(25, "amd64", 8192);
+        assert!(f.contains(&"-XX:+IgnoreUnrecognizedVMOptions".to_string()));
+        assert!(f.contains(&"-XX:+AutoCreateSharedArchive".to_string()));
+        assert!(f.contains(&"-XX:SharedArchiveFile=remix-cds.jsa".to_string()));
+        assert!(
+            !flags(17, "amd64", 4096)
+                .iter()
+                .any(|f| f.contains("SharedArchive")),
+            "older runtimes must not carry flags they cannot parse safely"
+        );
     }
 
     #[test]
@@ -741,7 +811,7 @@ mod tests {
             assert_eq!(
                 flags,
                 vec![
-                    "-Xms512M".to_string(),
+                    format!("-Xms{mem}M"),
                     "-XX:+UseG1GC".to_string(),
                     "-XX:+ParallelRefProcEnabled".to_string(),
                 ],
@@ -770,7 +840,7 @@ mod tests {
             );
             assert_eq!(
                 flags,
-                vec!["-Xms512M"],
+                vec!["-Xms16384M"],
                 "{arg} should leave only the collector-independent flags"
             );
         }
@@ -869,7 +939,14 @@ mod tests {
     fn a_modern_runtime_gets_the_full_set() {
         assert_eq!(
             flags(25, "aarch64", 16384),
-            vec!["-Xms512M", "-XX:+UseZGC", "-XX:+UseCompactObjectHeaders"]
+            vec![
+                "-Xms16384M",
+                "-XX:+UseZGC",
+                "-XX:+UseCompactObjectHeaders",
+                "-XX:+IgnoreUnrecognizedVMOptions",
+                "-XX:+AutoCreateSharedArchive",
+                "-XX:SharedArchiveFile=remix-cds.jsa",
+            ]
         );
     }
 
@@ -877,14 +954,26 @@ mod tests {
     fn a_tiny_profile_never_starts_above_its_ceiling() {
         assert_eq!(
             flags(21, "amd64", 256),
-            vec!["-Xms256M", "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled",],
+            vec![
+                "-Xms256M",
+                "-XX:+UseG1GC",
+                "-XX:+ParallelRefProcEnabled",
+                "-XX:MaxGCPauseMillis=100",
+                "-XX:G1NewSizePercent=20",
+                "-XX:G1MaxNewSizePercent=40",
+                "-XX:G1ReservePercent=20",
+                "-XX:G1HeapWastePercent=5",
+                "-XX:G1MixedGCCountTarget=4",
+                "-XX:G1InitiatingHeapOccupancyPercent=35",
+                "-XX:G1MixedGCLiveThresholdPercent=90",
+            ],
             "a start size above the maximum is refused by the JVM outright"
         );
     }
 
     #[test]
     fn a_java_7_runtime_is_left_untouched() {
-        assert_eq!(flags(7, "amd64", 4096), vec!["-Xms512M"]);
+        assert_eq!(flags(7, "amd64", 4096), vec!["-Xms4096M"]);
     }
 
     fn install_jars(tag: &str, jars: &[&str]) -> (std::path::PathBuf, std::path::PathBuf) {
