@@ -74,7 +74,30 @@ async fn auto_install(refresh: UnboundedSender<()>) {
         .has_vendor_runtime(&JavaVendor::Microsoft, Some(major))
         .await
     {
-        Ok(true) => return,
+        // Keep the runtime current in the background: OpenJDK CPU releases
+        // ship security fixes, the newest build must always win the next
+        // selection. The check is one cheap HTTP request, the download only
+        // happens when the vendor published a newer build.
+        Ok(true) => {
+            let updater = state.clone();
+            tokio::spawn(async move {
+                match updater
+                    .java
+                    .patch_outdated_runtime(&JavaVendor::Microsoft, major, None)
+                    .await
+                {
+                    Ok(Some(runtime)) => {
+                        tracing::info!(major, version = %runtime.version, "updated the Java runtime");
+                        let _ = refresh.send(());
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        tracing::warn!("could not update the Java runtime: {err:#}");
+                    }
+                }
+            });
+            return;
+        }
         Ok(false) => {}
         Err(err) => {
             tracing::warn!("could not check for a Microsoft Java runtime: {err:#}");

@@ -288,6 +288,42 @@ impl JavaService {
         self.download_and_register(major, progress).await
     }
 
+    /// Keeps the vendor-managed runtime current. OpenJDK CPU releases ship
+    /// security fixes (Java4Shell, CVE-2026-114938), so whenever the vendor
+    /// publishes a newer build than the recorded one, download it in the
+    /// background and let the newer build win the next selection. The old
+    /// runtime stays on disk: a running game may still use it.
+    #[tracing::instrument(level = "debug", skip(self, progress))]
+    pub async fn patch_outdated_runtime(
+        &self,
+        vendor: &JavaVendor,
+        major: u32,
+        progress: Option<&GroupedProgressSession>,
+    ) -> JavaResult<Option<JavaRuntime>> {
+        let Some(current) = self.best_recorded_for_major(major).await? else {
+            // Nothing recorded: the regular install flow handles the first run
+            return Ok(None);
+        };
+
+        let Some(package) = self.latest_package(vendor, major).await? else {
+            return Ok(None);
+        };
+
+        let key = version_key(&current.version);
+        if !meets_security_floor(&current)
+            || (!package.java_version.is_empty() && key < package.java_version)
+        {
+            tracing::info!(
+                from = %current.version,
+                to = %package.name,
+                "updating the runtime to the newest published build"
+            );
+            return Ok(Some(self.download_and_register(major, progress).await?));
+        }
+
+        Ok(None)
+    }
+
     #[tracing::instrument(skip(self))]
     pub async fn install_runtime_from(
         &self,
