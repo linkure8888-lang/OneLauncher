@@ -136,6 +136,22 @@ next steps. Update it whenever a feature lands or a placeholder is replaced.
   removed max_lines so it wraps (crash_dialog/mod.rs discord_card).
 - Launcher-side theme images in OneConfig (polyfrosted-*) now show Remix art.
 
+### Light profile + violet accent (2026-11-28, local only — NO release)
+- User asked: de-lag OneConfig for weak PCs + gradient redesign, everything rollback-able per item,
+  no release. Applied LOCALLY via config files (no jar change needed for the runtime look):
+  .minecraft/config/themes.json + oneconfig.json:
+  blur OFF (heaviest), all menu/page animations OFF, instantSearch OFF, marquee OFF, UI sounds
+  OFF (all kinds), pageOpacity/sidebarOpacity 100, glowOpacity 12, accentColor [124,92,255] Remix
+  violet, glassTint/pixelGrid 0, activeTheme stays Nord. theme SVGs in the jar are only picker
+  thumbnails — real look = code-drawn glass, so config is the lever.
+- Rollback kit: %TEMP%/oc9/rollback/ (oneconfig.json.orig, themes.json.orig,
+  OneConfig-remix-1.9.4.v1.jar). Per-item revert = restore file or restore jar.
+- Launcher launched via oneclient://launch/26.3%20Fabric URL arg did NOT trigger the game boot
+  (no pending_launch log) — --launch "26.3 Fabric" got split at the space by arg parsing
+  (folder="26.3" bug in cli.rs? worth checking later). Launcher left running + minimized.
+- Static hard check: ALL PASSED (configs, single branded 1.9.4 in both clusters, companion
+  deployed, rollback kit). Real game boot pending user's manual test.
+
 ## Keys, secrets and endpoints
 
 - Discord Application ID: `1569698419491217500` (`oneclient_common/src/constants.rs`).
